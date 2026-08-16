@@ -249,6 +249,7 @@ type
     function EscapeResult: TTuiDialogResult;
     function CalcEffectiveWidth: Integer;
     function CalcEffectiveHeight: Integer;
+    function MeasureButtonBar(const ACaptions: TArray<string>): Integer;
     procedure RenderButtonBar(const ACanvas: TTuiCanvas; const ARect: TRect);
   protected
     /// <summary>
@@ -444,6 +445,13 @@ const
   CMinDialogHeight   = 4;
   CDefaultDialogWidth  = 50;
   CDefaultDialogHeight = 9;
+
+  // '[ ' + caption + ' ]' chrome around each button caption
+  CButtonChrome = 4;
+  // Gap between adjacent buttons
+  CButtonGap = 2;
+  // Lateral padding around the auto-sized button bar
+  CAutoWidthPadding = 6;
 
 { TTuiDialogCaptions }
 
@@ -675,21 +683,23 @@ begin
   Result := drCancel;
 end;
 
+function TTuiDialog.MeasureButtonBar(const ACaptions: TArray<string>): Integer;
+begin
+  Result := 0;
+  for var S in ACaptions do
+    Inc(Result, TTuiAnsi.VisibleLength(S) + CButtonChrome);
+  if Length(ACaptions) > 1 then
+    Inc(Result, (Length(ACaptions) - 1) * CButtonGap);
+end;
+
 function TTuiDialog.CalcEffectiveWidth: Integer;
 begin
   if FDialogWidth > 0 then
     Result := FDialogWidth
   else
-  begin
     // Auto-width: enough to fit the button bar with lateral padding.
-    var LCaptions := GetButtonCaptions;
-    var LBtnWidth := 0;
-    for var S in LCaptions do
-      Inc(LBtnWidth, TTuiAnsi.VisibleLength(S) + 4); // "[ X ]"
-    if Length(LCaptions) > 1 then
-      Inc(LBtnWidth, (Length(LCaptions) - 1) * 2);
-    Result := Max(LBtnWidth + 6, CDefaultDialogWidth);
-  end;
+    Result := Max(MeasureButtonBar(GetButtonCaptions) + CAutoWidthPadding,
+      CDefaultDialogWidth);
 end;
 
 function TTuiDialog.CalcEffectiveHeight: Integer;
@@ -709,29 +719,23 @@ begin
   if LCount = 0 then
     Exit;
 
-  // Compute total rendered width of all buttons and gaps.
-  var LTotalWidth := 0;
-  for var LI := 0 to LCount - 1 do
-    Inc(LTotalWidth, TTuiAnsi.VisibleLength(LCaptions[LI]) + 4); // "[ X ]"
-  if LCount > 1 then
-    Inc(LTotalWidth, (LCount - 1) * 2); // 2-char gaps between buttons
-
   // Centre the group horizontally within ARect.
+  var LTotalWidth := MeasureButtonBar(LCaptions);
   var LCurX := ARect.Left + Max((ARect.Width - LTotalWidth) div 2, 0);
   var LY := ARect.Top;
 
   for var LI := 0 to LCount - 1 do
   begin
     var LCaption := '[ ' + LCaptions[LI] + ' ]';
+    var LWidth := TTuiAnsi.VisibleLength(LCaption);
     var LStyle: TTuiStyle;
     if Focused and (LI = FButtonIndex) then
       LStyle := FButtonFocusedStyle
     else
       LStyle := FButtonNormalStyle;
     ACanvas.WriteAt(LCurX, LY, LCaption, LStyle);
-    FButtonRects[LI] := TRect.Create(LCurX, LY,
-      LCurX + TTuiAnsi.VisibleLength(LCaption), LY + 1);
-    Inc(LCurX, TTuiAnsi.VisibleLength(LCaption) + 2);
+    FButtonRects[LI] := TRect.Create(LCurX, LY, LCurX + LWidth, LY + 1);
+    Inc(LCurX, LWidth + CButtonGap);
   end;
 end;
 
