@@ -120,13 +120,6 @@ const
   // Minimum displayed-value delta (0.5%) that triggers a repaint.
   CRepaintEpsilon = 0.005;
 
-const
-
-  // Horizontal partial blocks U+258F (1/8) .. U+2588 (8/8)
-  CBlocks: array[0..7] of string = (
-    #$258F, #$258E, #$258D, #$258C,
-    #$258B, #$258A, #$2589, #$2588);
-
 { TTuiGauge }
 
 constructor TTuiGauge.Create(AParent: TTuiWidget);
@@ -255,28 +248,8 @@ begin
   if LBarWidth < 1 then
     LBarWidth := 1;
 
-  var LFilledEighths := Round(FDisplayValue * LBarWidth * 8);
-  var LFullBlocks := LFilledEighths div 8;
-  var LRemEighths := LFilledEighths mod 8;
-
-  var LX := ARect.Left;
-  while (LX < ARect.Left + LFullBlocks) and (LX < ARect.Left + LBarWidth) do
-  begin
-    ACanvas.WriteAt(LX, ARect.Top, CBlocks[7], LFillStyle);
-    Inc(LX);
-  end;
-
-  if (LRemEighths > 0) and (LX < ARect.Left + LBarWidth) then
-  begin
-    ACanvas.WriteAt(LX, ARect.Top, CBlocks[LRemEighths - 1], LFillStyle);
-    Inc(LX);
-  end;
-
-  while LX < ARect.Left + LBarWidth do
-  begin
-    ACanvas.WriteAt(LX, ARect.Top, ' ', LEmptyStyle);
-    Inc(LX);
-  end;
+  ACanvas.DrawEighthsBar(ARect.Left, ARect.Top, LBarWidth, FDisplayValue,
+    LFillStyle, LEmptyStyle);
 
   if FShowPercent then
     ACanvas.WriteAt(ARect.Left + LBarWidth, ARect.Top, ' ' + LPctStr, LTextStyle);

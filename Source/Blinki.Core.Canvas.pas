@@ -129,6 +129,14 @@ type
     ///   ATitle (if non-empty) is centred on the top edge and truncated if
     ///   necessary. The interior of the box is left unchanged.
     /// </summary>
+    /// <summary>
+    ///   Draws a one-row horizontal bar filled to AFraction (0..1) of AWidth
+    ///   columns using eighth-block glyphs: full blocks, a partial cap, then
+    ///   AEmptyStyle-filled space for the remainder. Fractions outside 0..1
+    ///   are clamped to an empty or full bar.
+    /// </summary>
+    procedure DrawEighthsBar(AX, AY, AWidth: Integer; AFraction: Double;
+      const AFillStyle, AEmptyStyle: TTuiStyle);
     procedure DrawBox(const ARect: TRect; ABoxStyle: TTuiBoxStyle;
       const ATitle: string; const AStyle: TTuiStyle);
 
@@ -449,6 +457,43 @@ begin
   for var LX := 1 to LInnerWidth do
     WriteCell(ARect.Left + LX, LBottomY, TTuiCell.Make(LChars.Horizontal, AStyle));
   WriteCell(ARect.Right - 1, LBottomY, TTuiCell.Make(LChars.BottomRight, AStyle));
+end;
+
+procedure TTuiCanvas.DrawEighthsBar(AX, AY, AWidth: Integer; AFraction: Double;
+  const AFillStyle, AEmptyStyle: TTuiStyle);
+const
+  // Horizontal partial blocks U+258F (1/8) .. U+2588 (8/8)
+  CHBlocks: array[0..7] of Char = (
+    #$258F, #$258E, #$258D, #$258C,
+    #$258B, #$258A, #$2589, #$2588);
+begin
+  if AWidth < 1 then
+    Exit;
+  var LFilledEighths := Round(AFraction * AWidth * 8);
+  var LFullBlocks := LFilledEighths div 8;
+  var LRemEighths := LFilledEighths mod 8;
+  if LFullBlocks < 0 then
+  begin
+    LFullBlocks := 0;
+    LRemEighths := 0;
+  end
+  else if LFullBlocks > AWidth then
+  begin
+    LFullBlocks := AWidth;
+    LRemEighths := 0;
+  end;
+
+  if LFullBlocks > 0 then
+    FillRect(TRect.Create(AX, AY, AX + LFullBlocks, AY + 1),
+      CHBlocks[High(CHBlocks)], AFillStyle);
+  var LX := AX + LFullBlocks;
+  if (LRemEighths > 0) and (LX < AX + AWidth) then
+  begin
+    WriteCell(LX, AY, TTuiCell.Make(CHBlocks[LRemEighths - 1], AFillStyle));
+    Inc(LX);
+  end;
+  if LX < AX + AWidth then
+    FillRect(TRect.Create(LX, AY, AX + AWidth, AY + 1), ' ', AEmptyStyle);
 end;
 
 function TTuiCanvas.BuildFlushSequence: string;
