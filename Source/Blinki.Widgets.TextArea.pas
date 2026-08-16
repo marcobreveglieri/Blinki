@@ -76,6 +76,7 @@ type
     procedure ClampViewport(ACursorCol, AViewWidth, AViewHeight: Integer);
     function  GetText: string;
     procedure InsertText(const AText: string);
+    procedure NotifyTextChanged;
     procedure RebuildStyles;
     procedure SetFocusedStyle(const AValue: TTuiStyle);
     procedure SetNormalStyle(const AValue: TTuiStyle);
@@ -243,6 +244,13 @@ begin
   Inc(FCursorCol, Length(AText));
 end;
 
+procedure TTuiTextArea.NotifyTextChanged;
+begin
+  if Assigned(FOnTextChanged) then
+    FOnTextChanged(GetText);
+  Invalidate;
+end;
+
 procedure TTuiTextArea.DoRender(const ACanvas: TTuiCanvas; const ARect: TRect);
 begin
   if ARect.IsEmpty then
@@ -332,23 +340,23 @@ begin
   if AEvent.Kind <> ekKey then
     Exit;
 
+  // Editing keys are ignored (not consumed) in read-only mode; navigation
+  // keys below stay available.
+  if FReadOnly and
+     (AEvent.Key.Code in [kcChar, kcSpace, kcEnter, kcBackspace, kcDelete]) then
+    Exit;
+
   case AEvent.Key.Code of
     kcChar, kcSpace:
-      if not FReadOnly then
+      if (AEvent.Key.Code = kcSpace) or AEvent.Key.IsPrintable then
       begin
-        if (AEvent.Key.Code = kcSpace) or AEvent.Key.IsPrintable then
-        begin
-          // CharText may span two code units (emoji beyond the BMP).
-          InsertText(AEvent.Key.CharText);
-          if Assigned(FOnTextChanged) then
-            FOnTextChanged(GetText);
-          Invalidate;
-          Result := True;
-        end;
+        // CharText may span two code units (emoji beyond the BMP).
+        InsertText(AEvent.Key.CharText);
+        NotifyTextChanged;
+        Result := True;
       end;
 
     kcEnter:
-      if not FReadOnly then
       begin
         // Split current line at cursor position
         var LCurrentLine := FLines[FCursorRow];
@@ -357,45 +365,35 @@ begin
         FLines.Insert(FCursorRow + 1, LTail);
         Inc(FCursorRow);
         FCursorCol := 0;
-        if Assigned(FOnTextChanged) then
-          FOnTextChanged(GetText);
-        Invalidate;
+        NotifyTextChanged;
         Result := True;
       end;
 
     kcBackspace:
-      if not FReadOnly then
+      if FCursorCol > 0 then
       begin
-        if FCursorCol > 0 then
-        begin
-          // Delete the whole grapheme cluster to the left on the same line
-          var LLine := FLines[FCursorRow];
-          var LStart := TTuiUnicode.PrevGraphemeBoundary(LLine, FCursorCol + 1);
-          Delete(LLine, LStart, FCursorCol + 1 - LStart);
-          FLines[FCursorRow] := LLine;
-          FCursorCol := LStart - 1;
-          if Assigned(FOnTextChanged) then
-            FOnTextChanged(GetText);
-          Invalidate;
-          Result := True;
-        end
-        else if FCursorRow > 0 then
-        begin
-          // Merge current line into the previous one
-          var LPrevLen := Length(FLines[FCursorRow - 1]);
-          FLines[FCursorRow - 1] := FLines[FCursorRow - 1] + FLines[FCursorRow];
-          FLines.Delete(FCursorRow);
-          Dec(FCursorRow);
-          FCursorCol := LPrevLen;
-          if Assigned(FOnTextChanged) then
-            FOnTextChanged(GetText);
-          Invalidate;
-          Result := True;
-        end;
+        // Delete the whole grapheme cluster to the left on the same line
+        var LLine := FLines[FCursorRow];
+        var LStart := TTuiUnicode.PrevGraphemeBoundary(LLine, FCursorCol + 1);
+        Delete(LLine, LStart, FCursorCol + 1 - LStart);
+        FLines[FCursorRow] := LLine;
+        FCursorCol := LStart - 1;
+        NotifyTextChanged;
+        Result := True;
+      end
+      else if FCursorRow > 0 then
+      begin
+        // Merge current line into the previous one
+        var LPrevLen := Length(FLines[FCursorRow - 1]);
+        FLines[FCursorRow - 1] := FLines[FCursorRow - 1] + FLines[FCursorRow];
+        FLines.Delete(FCursorRow);
+        Dec(FCursorRow);
+        FCursorCol := LPrevLen;
+        NotifyTextChanged;
+        Result := True;
       end;
 
     kcDelete:
-      if not FReadOnly then
       begin
         var LLine := FLines[FCursorRow];
         if FCursorCol < Length(LLine) then
@@ -404,9 +402,7 @@ begin
           Delete(LLine, FCursorCol + 1,
             TTuiUnicode.GraphemeLengthAt(LLine, FCursorCol + 1));
           FLines[FCursorRow] := LLine;
-          if Assigned(FOnTextChanged) then
-            FOnTextChanged(GetText);
-          Invalidate;
+          NotifyTextChanged;
           Result := True;
         end
         else if FCursorRow < FLines.Count - 1 then
@@ -414,9 +410,7 @@ begin
           // Merge next line into the current one
           FLines[FCursorRow] := LLine + FLines[FCursorRow + 1];
           FLines.Delete(FCursorRow + 1);
-          if Assigned(FOnTextChanged) then
-            FOnTextChanged(GetText);
-          Invalidate;
+          NotifyTextChanged;
           Result := True;
         end;
       end;
