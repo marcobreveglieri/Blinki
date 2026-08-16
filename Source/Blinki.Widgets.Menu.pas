@@ -307,19 +307,15 @@ begin
   case AEvent.Key.Code of
     kcUp:
       begin
-        var LIndex := FItemIndex - 1;
-        while (LIndex >= 0) and FItems[LIndex].Separator do
-          Dec(LIndex);
+        var LIndex := NextSelectableIndex(FItemIndex - 1, -1);
         if LIndex >= 0 then
           SetItemIndex(LIndex);
         Result := True;
       end;
     kcDown:
       begin
-        var LIndex := FItemIndex + 1;
-        while (LIndex < FItems.Count) and FItems[LIndex].Separator do
-          Inc(LIndex);
-        if LIndex < FItems.Count then
+        var LIndex := NextSelectableIndex(FItemIndex + 1, 1);
+        if LIndex >= 0 then
           SetItemIndex(LIndex);
         Result := True;
       end;
@@ -332,27 +328,21 @@ begin
       end;
     kcEnd:
       begin
-        var LIndex := FItems.Count - 1;
-        while (LIndex >= 0) and FItems[LIndex].Separator do
-          Dec(LIndex);
+        var LIndex := NextSelectableIndex(FItems.Count - 1, -1);
         if LIndex >= 0 then
           SetItemIndex(LIndex);
         Result := True;
       end;
     kcPageUp:
       begin
-        var LIndex := Max(0, FItemIndex - LPageStep);
-        while (LIndex < FItems.Count) and FItems[LIndex].Separator do
-          Inc(LIndex);
-        if LIndex < FItems.Count then
+        var LIndex := NextSelectableIndex(Max(0, FItemIndex - LPageStep), 1);
+        if LIndex >= 0 then
           SetItemIndex(LIndex);
         Result := True;
       end;
     kcPageDown:
       begin
-        var LIndex := Min(FItems.Count - 1, FItemIndex + LPageStep);
-        while (LIndex >= 0) and FItems[LIndex].Separator do
-          Dec(LIndex);
+        var LIndex := NextSelectableIndex(Min(FItems.Count - 1, FItemIndex + LPageStep), -1);
         if LIndex >= 0 then
           SetItemIndex(LIndex);
         Result := True;
