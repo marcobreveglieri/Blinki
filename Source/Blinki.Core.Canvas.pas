@@ -252,22 +252,22 @@ end;
 procedure TTuiCanvas.WriteCell(AX, AY: Integer; const ACell: TTuiCell);
 begin
   var LClip := ActiveClipRect;
-  if (AX >= LClip.Left) and (AX < LClip.Right) and
-     (AY >= LClip.Top)  and (AY < LClip.Bottom) then
-  begin
-    // The neighbor probe is only needed when some continuation cell has been
-    // written since the last full clear; plain ASCII frames skip it entirely.
-    // AX/AY are already validated against LClip (a sub-rect of the buffer),
-    // so the unchecked accessors below are safe.
-    if FBackHasGlyphSpans and
-       (FBack.GetCellUnchecked(AX, AY).IsContinuation or
-        ((AX + 1 < FBack.Width) and FBack.GetCellUnchecked(AX + 1, AY).IsContinuation)) then
-      BlankGlyphSpan(AX, AY);
-    if ACell.IsContinuation then
-      FBackHasGlyphSpans := True;
-    FBack.SetCellUnchecked(AX, AY, ACell);
-    FDirty := True;
-  end;
+  if (AX < LClip.Left) or (AX >= LClip.Right) or
+     (AY < LClip.Top) or (AY >= LClip.Bottom) then
+    Exit;
+
+  // The neighbor probe is only needed when some continuation cell has been
+  // written since the last full clear; plain ASCII frames skip it entirely.
+  // AX/AY are already validated against LClip (a sub-rect of the buffer),
+  // so the unchecked accessors below are safe.
+  if FBackHasGlyphSpans and
+     (FBack.GetCellUnchecked(AX, AY).IsContinuation or
+      ((AX + 1 < FBack.Width) and FBack.GetCellUnchecked(AX + 1, AY).IsContinuation)) then
+    BlankGlyphSpan(AX, AY);
+  if ACell.IsContinuation then
+    FBackHasGlyphSpans := True;
+  FBack.SetCellUnchecked(AX, AY, ACell);
+  FDirty := True;
 end;
 
 function TTuiCanvas.ClampRect(const ARect: TRect): TRect;
@@ -324,9 +324,7 @@ end;
 
 procedure TTuiCanvas.Clear(const AStyle: TTuiStyle);
 begin
-  FBack.Clear(TTuiCell.Make(' ', AStyle));
-  FBackHasGlyphSpans := False;
-  FDirty := True;
+  Clear(' ', AStyle);
 end;
 
 procedure TTuiCanvas.Clear(AFiller: Char; const AStyle: TTuiStyle);
@@ -437,26 +435,21 @@ begin
     LTopLine := LTopLine + LChars.TopRight;
   end;
 
-  begin
-    var LY := ARect.Top;
-    WriteAt(ARect.Left, LY, LTopLine, AStyle);
+  WriteAt(ARect.Left, ARect.Top, LTopLine, AStyle);
 
-    // Side rows
-    for LY := ARect.Top + 1 to ARect.Bottom - 2 do
-    begin
-      WriteCell(ARect.Left,        LY, TTuiCell.Make(LChars.Vertical, AStyle));
-      WriteCell(ARect.Right - 1,   LY, TTuiCell.Make(LChars.Vertical, AStyle));
-    end;
+  // Side rows
+  for var LY := ARect.Top + 1 to ARect.Bottom - 2 do
+  begin
+    WriteCell(ARect.Left,        LY, TTuiCell.Make(LChars.Vertical, AStyle));
+    WriteCell(ARect.Right - 1,   LY, TTuiCell.Make(LChars.Vertical, AStyle));
   end;
 
   // Bottom row
-  begin
-    var LY := ARect.Bottom - 1;
-    WriteCell(ARect.Left, LY, TTuiCell.Make(LChars.BottomLeft, AStyle));
-    for var LX := 1 to LInnerWidth do
-      WriteCell(ARect.Left + LX, LY, TTuiCell.Make(LChars.Horizontal, AStyle));
-    WriteCell(ARect.Right - 1, LY, TTuiCell.Make(LChars.BottomRight, AStyle));
-  end;
+  var LBottomY := ARect.Bottom - 1;
+  WriteCell(ARect.Left, LBottomY, TTuiCell.Make(LChars.BottomLeft, AStyle));
+  for var LX := 1 to LInnerWidth do
+    WriteCell(ARect.Left + LX, LBottomY, TTuiCell.Make(LChars.Horizontal, AStyle));
+  WriteCell(ARect.Right - 1, LBottomY, TTuiCell.Make(LChars.BottomRight, AStyle));
 end;
 
 function TTuiCanvas.BuildFlushSequence: string;
