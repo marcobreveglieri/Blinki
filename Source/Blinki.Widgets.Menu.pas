@@ -224,14 +224,7 @@ end;
 
 procedure TTuiMenu.AdjustViewOffset;
 begin
-  if FLastViewHeight <= 0 then
-    Exit;
-  if FItemIndex < FViewOffset then
-    FViewOffset := FItemIndex;
-  if FItemIndex >= FViewOffset + FLastViewHeight then
-    FViewOffset := FItemIndex - FLastViewHeight + 1;
-  if FViewOffset < 0 then
-    FViewOffset := 0;
+  FViewOffset := ClampViewOffset(FItemIndex, FLastViewHeight, FViewOffset);
 end;
 
 procedure TTuiMenu.DoRender(const ACanvas: TTuiCanvas; const ARect: TRect);

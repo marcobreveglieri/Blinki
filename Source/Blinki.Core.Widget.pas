@@ -95,6 +95,14 @@ type
     procedure SetLayoutConstraint(const AValue: TTuiLayoutConstraint);
   protected
     /// <summary>
+    ///   Clamps a list view offset so the item at AItemIndex stays visible in
+    ///   a viewport of AViewHeight rows. Shared by the scrolling list widgets
+    ///   (Menu, Select, Table). Returns AOffset unchanged when AViewHeight is
+    ///   not positive.
+    /// </summary>
+    class function ClampViewOffset(AItemIndex, AViewHeight,
+      AOffset: Integer): Integer; static;
+    /// <summary>
     ///   Initialization hook; called by Init after all children. Override is optional.
     /// </summary>
     procedure DoInit; virtual;
@@ -258,6 +266,20 @@ type
 implementation
 
 { TTuiWidget }
+
+class function TTuiWidget.ClampViewOffset(AItemIndex, AViewHeight,
+  AOffset: Integer): Integer;
+begin
+  Result := AOffset;
+  if AViewHeight <= 0 then
+    Exit;
+  if AItemIndex < Result then
+    Result := AItemIndex;
+  if AItemIndex >= Result + AViewHeight then
+    Result := AItemIndex - AViewHeight + 1;
+  if Result < 0 then
+    Result := 0;
+end;
 
 constructor TTuiWidget.Create(AParent: TTuiWidget = nil);
 begin

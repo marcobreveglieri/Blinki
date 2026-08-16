@@ -414,14 +414,7 @@ end;
 
 procedure TTuiTable.AdjustViewOffset(AViewH: Integer);
 begin
-  if AViewH <= 0 then
-    Exit;
-  if FItemIndex < FViewOffset then
-    FViewOffset := FItemIndex;
-  if FItemIndex >= FViewOffset + AViewH then
-    FViewOffset := FItemIndex - AViewH + 1;
-  if FViewOffset < 0 then
-    FViewOffset := 0;
+  FViewOffset := ClampViewOffset(FItemIndex, AViewH, FViewOffset);
 end;
 
 procedure TTuiTable.ComputeWidths(AContentW: Integer; out AWidths: TArray<Integer>);
