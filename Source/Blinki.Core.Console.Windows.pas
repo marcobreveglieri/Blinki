@@ -38,6 +38,7 @@ interface
 {$IFDEF MSWINDOWS}
 
 uses
+  System.Diagnostics,
   System.Types,
   Winapi.Windows,
   Blinki.Core.Console,
@@ -108,6 +109,8 @@ type
     FOpened: Boolean;
     FStdOut: THandle;
     FStdIn: THandle;
+    function DecodeCharacterKey(AChar: Char; const AModifiers: TTuiKeyModifiers;
+      out AKey: TTuiKeyEvent): Boolean;
     function DecodeInputRecord(const ARec: TTuiWinInputRecord;
       out AKey: TTuiKeyEvent): Boolean;
     function DecodeMouseRecord(const ARec: TTuiWinInputRecord;
@@ -286,6 +289,50 @@ begin
   Result.cy := LInfo.srWindow.Bottom - LInfo.srWindow.Top + 1;
 end;
 
+// Shared decoding of dwControlKeyState, identical for key and mouse records.
+// LEFT_CTRL_PRESSED, RIGHT_CTRL_PRESSED, SHIFT_PRESSED, LEFT_ALT_PRESSED,
+// RIGHT_ALT_PRESSED are all defined in Winapi.Windows.
+function DecodeControlKeyState(AState: DWORD): TTuiKeyModifiers;
+begin
+  Result := [];
+  if (AState and (LEFT_CTRL_PRESSED or RIGHT_CTRL_PRESSED)) <> 0 then
+    Include(Result, kmCtrl);
+  if (AState and SHIFT_PRESSED) <> 0 then
+    Include(Result, kmShift);
+  if (AState and (LEFT_ALT_PRESSED or RIGHT_ALT_PRESSED)) <> 0 then
+    Include(Result, kmAlt);
+end;
+
+function TTuiWindowsConsoleBackend.DecodeCharacterKey(AChar: Char;
+  const AModifiers: TTuiKeyModifiers; out AKey: TTuiKeyEvent): Boolean;
+begin
+  Result := False;
+  if AChar = #0 then
+    Exit; // unmapped key (e.g. standalone modifier key)
+  if TTuiUnicode.IsHighSurrogate(AChar) then
+  begin
+    // First half of a supplementary-plane character: stash it and keep
+    // draining until the matching low surrogate arrives.
+    FPendingHighSurrogate := AChar;
+    Exit;
+  end;
+  if TTuiUnicode.IsLowSurrogate(AChar) then
+  begin
+    if FPendingHighSurrogate = #0 then
+      Exit; // orphan low surrogate: drop it
+    AKey := TTuiKeyEvent.MakeCodePoint(kcChar,
+      TTuiUnicode.CombineSurrogates(FPendingHighSurrogate, AChar), AModifiers);
+    FPendingHighSurrogate := #0;
+  end
+  else
+  begin
+    // A BMP character invalidates any stashed half (orphan high surrogate).
+    FPendingHighSurrogate := #0;
+    AKey := TTuiKeyEvent.Make(kcChar, AChar, AModifiers);
+  end;
+  Result := True;
+end;
+
 function TTuiWindowsConsoleBackend.DecodeInputRecord(const ARec: TTuiWinInputRecord;
   out AKey: TTuiKeyEvent): Boolean;
 begin
@@ -294,16 +341,7 @@ begin
   if (ARec.EventType <> KEY_EVENT) or not ARec.KeyEvent.bKeyDown then
     Exit;
 
-  var LModifiers: TTuiKeyModifiers := [];
-  // LEFT_CTRL_PRESSED, RIGHT_CTRL_PRESSED, SHIFT_PRESSED, LEFT_ALT_PRESSED,
-  // RIGHT_ALT_PRESSED are all defined in Winapi.Windows.
-  var LState := ARec.KeyEvent.dwControlKeyState;
-  if (LState and (LEFT_CTRL_PRESSED or RIGHT_CTRL_PRESSED)) <> 0 then
-    Include(LModifiers, kmCtrl);
-  if (LState and SHIFT_PRESSED) <> 0 then
-    Include(LModifiers, kmShift);
-  if (LState and (LEFT_ALT_PRESSED or RIGHT_ALT_PRESSED)) <> 0 then
-    Include(LModifiers, kmAlt);
+  var LModifiers := DecodeControlKeyState(ARec.KeyEvent.dwControlKeyState);
 
   case ARec.KeyEvent.wVirtualKeyCode of
     VK_RETURN:
@@ -341,33 +379,8 @@ begin
         TTuiKeyCode(Ord(kcF1) + (ARec.KeyEvent.wVirtualKeyCode - VK_F1)),
         #0, LModifiers);
   else
-    if ARec.KeyEvent.UnicodeChar <> #0 then
-    begin
-      var LChar := ARec.KeyEvent.UnicodeChar;
-      if TTuiUnicode.IsHighSurrogate(LChar) then
-      begin
-        // First half of a supplementary-plane character: stash it and keep
-        // draining until the matching low surrogate arrives.
-        FPendingHighSurrogate := LChar;
-        Exit;
-      end;
-      if TTuiUnicode.IsLowSurrogate(LChar) then
-      begin
-        if FPendingHighSurrogate = #0 then
-          Exit; // orphan low surrogate: drop it
-        AKey := TTuiKeyEvent.MakeCodePoint(kcChar,
-          TTuiUnicode.CombineSurrogates(FPendingHighSurrogate, LChar), LModifiers);
-        FPendingHighSurrogate := #0;
-      end
-      else
-      begin
-        // A BMP character invalidates any stashed half (orphan high surrogate).
-        FPendingHighSurrogate := #0;
-        AKey := TTuiKeyEvent.Make(kcChar, LChar, LModifiers);
-      end;
-    end
-    else
-      Exit; // unmapped key (e.g. standalone modifier key)
+    if not DecodeCharacterKey(ARec.KeyEvent.UnicodeChar, LModifiers, AKey) then
+      Exit;
   end;
   // A completed non-character key (Enter, arrows, ...) invalidates any
   // stashed surrogate half from a malformed earlier sequence, so a stale
@@ -428,38 +441,27 @@ end;
 function TTuiWindowsConsoleBackend.TryReadKey(ATimeoutMs: Integer;
   out AKey: TTuiKeyEvent): Boolean;
 begin
+  // Thin filter over TryReadEvent, mirroring the POSIX backend: mouse
+  // events are discarded and the wait keeps going within the deadline.
   Result := False;
+  AKey := TTuiKeyEvent.Make(kcNone, #0, []);
+  if ATimeoutMs < 0 then
+    ATimeoutMs := 0;
 
-  var LWaitResult := WaitForSingleObject(FStdIn, ATimeoutMs);
-  if LWaitResult = WAIT_TIMEOUT then
-    Exit;
-  if LWaitResult <> WAIT_OBJECT_0 then
-    Exit;
-
-  // Events are available; find the first useful keyboard event
+  var LWatch := TStopwatch.StartNew;
   repeat
-    var LNumEvents: DWORD;
-    GetNumberOfConsoleInputEvents(FStdIn, LNumEvents);
-    if LNumEvents = 0 then
+    var LRemaining := ATimeoutMs - Integer(LWatch.ElapsedMilliseconds);
+    if LRemaining < 0 then
+      LRemaining := 0;
+    var LEvent: TTuiEvent;
+    if not TryReadEvent(LRemaining, LEvent) then
       Exit;
-
-    var LRec: TTuiWinInputRecord;
-
-    var LNumRead: DWORD;
-    WinPeekConsoleInput(FStdIn, LRec, 1, LNumRead);
-    if LNumRead = 0 then
-      Exit;
-
-    if DecodeInputRecord(LRec, AKey) then
+    if LEvent.Kind = ekKey then
     begin
-      // Consume the event from the queue
-      WinReadConsoleInput(FStdIn, LRec, 1, LNumRead);
-      Result := True;
-      Exit;
-    end
-    else
-      // Non-keyboard event or key-up: discard and continue
-      WinReadConsoleInput(FStdIn, LRec, 1, LNumRead);
+      AKey := LEvent.Key;
+      Exit(True);
+    end;
+    // Mouse event: discard and keep looking within the deadline
   until False;
 end;
 
@@ -471,14 +473,7 @@ begin
     Exit;
 
   // Decode keyboard modifiers from the mouse record
-  var LModifiers: TTuiKeyModifiers := [];
-  var LState := ARec.MouseEvent.dwControlKeyState;
-  if (LState and (LEFT_CTRL_PRESSED or RIGHT_CTRL_PRESSED)) <> 0 then
-    Include(LModifiers, kmCtrl);
-  if (LState and SHIFT_PRESSED) <> 0 then
-    Include(LModifiers, kmShift);
-  if (LState and (LEFT_ALT_PRESSED or RIGHT_ALT_PRESSED)) <> 0 then
-    Include(LModifiers, kmAlt);
+  var LModifiers := DecodeControlKeyState(ARec.MouseEvent.dwControlKeyState);
 
   var LPosX := ARec.MouseEvent.PosX;
   var LPosY := ARec.MouseEvent.PosY;
@@ -520,26 +515,26 @@ begin
 
   // Identify the first changed button (priority: left, right, middle)
   var LButton: TTuiMouseButton;
+  var LBit: DWORD;
   if (LChanged and BLINKI_BTN_LEFT) <> 0 then
-    LButton := mbLeft
+  begin
+    LButton := mbLeft;
+    LBit := BLINKI_BTN_LEFT;
+  end
   else if (LChanged and BLINKI_BTN_RIGHT) <> 0 then
-    LButton := mbRight
+  begin
+    LButton := mbRight;
+    LBit := BLINKI_BTN_RIGHT;
+  end
   else if (LChanged and BLINKI_BTN_MIDDLE) <> 0 then
-    LButton := mbMiddle
+  begin
+    LButton := mbMiddle;
+    LBit := BLINKI_BTN_MIDDLE;
+  end
   else
     Exit;
 
   // Bit newly set = press; bit newly cleared = release
-  var LBit := BLINKI_BTN_LEFT;
-  case LButton of
-    mbLeft:
-      LBit := BLINKI_BTN_LEFT;
-    mbRight:
-      LBit := BLINKI_BTN_RIGHT;
-    mbMiddle:
-      LBit := BLINKI_BTN_MIDDLE;
-  end;
-
   var LKind: TTuiMouseEventKind;
   if (LCurrButtons and LBit) <> 0 then
     LKind := mekDown
