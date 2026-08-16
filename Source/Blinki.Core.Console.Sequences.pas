@@ -72,11 +72,16 @@ type
     /// </summary>
     DefaultEscTimeoutMs = 30;
   strict private
+  type
+    TCsiParams = array[0..3] of Integer;
+  var
     FBuffer: TBytes;
     FCount: Integer;
     FEvents: TQueue<TTuiEvent>;
     class function DecodeModifiers(AParam: Integer): TTuiKeyModifiers; static;
     procedure Discard(ACount: Integer);
+    class function KeyFromControlByte(AByte: Byte;
+      const AExtra: TTuiKeyModifiers; out AEvent: TTuiEvent): Boolean; static;
     class function KeyFromLetter(AFinal: Byte; AModifiers: TTuiKeyModifiers;
       out AEvent: TTuiEvent): Boolean; static;
     class function KeyFromTilde(AParam: Integer; AModifiers: TTuiKeyModifiers;
@@ -100,6 +105,12 @@ type
       out AConsumed: Integer; out AEvent: TTuiEvent; out AHasEvent: Boolean;
       out ANeedMore: Boolean); static;
     procedure Pump;
+    class procedure ScanCsiParams(const ABuffer: TBytes; ACount: Integer;
+      var AIndex: Integer; out AParams: TCsiParams;
+      out AParamCount: Integer); static;
+    class function TryParseCsiSpecial(const ABuffer: TBytes; ACount: Integer;
+      out AConsumed: Integer; out AEvent: TTuiEvent; out AHasEvent: Boolean;
+      out ANeedMore: Boolean): Boolean; static;
   public
     /// <summary>
     ///   Creates an empty decoder.
@@ -299,6 +310,37 @@ begin
     AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(LCode, #0, AModifiers));
 end;
 
+class function TTuiSequenceDecoder.KeyFromControlByte(AByte: Byte;
+  const AExtra: TTuiKeyModifiers; out AEvent: TTuiEvent): Boolean;
+begin
+  // Shared mapping of a single ASCII/C0 byte to a key event, used both for
+  // standalone bytes (ParseOne, AExtra = []) and for Meta/Alt-prefixed ones
+  // (ParseEscape, AExtra = [kmAlt]).
+  Result := True;
+  case AByte of
+    $0D, $0A:
+      // Enter arrives as CR in raw mode (ICRNL cleared); Ctrl+J maps here too
+      AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcEnter, #0, AExtra));
+    $09:
+      AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcTab, #0, AExtra));
+    $08, $7F:
+      // Both BS and DEL map to Backspace: terminals disagree on which one
+      // the Backspace key sends.
+      AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcBackspace, #0, AExtra));
+    Ord(' '):
+      AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcSpace, ' ', AExtra));
+    $01..$07, $0B, $0C, $0E..$1A:
+      // Ctrl+letter: deliver the control byte itself with kmCtrl, exactly
+      // like the Windows backend (demos test AKey.Character = #17 etc.).
+      AEvent := TTuiEvent.MakeKey(
+        TTuiKeyEvent.Make(kcChar, Chr(AByte), AExtra + [kmCtrl]));
+    $21..$7E:
+      AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcChar, Chr(AByte), AExtra));
+  else
+    Result := False;
+  end;
+end;
+
 class function TTuiSequenceDecoder.KeyFromLetter(AFinal: Byte;
   AModifiers: TTuiKeyModifiers; out AEvent: TTuiEvent): Boolean;
 begin
@@ -381,20 +423,14 @@ begin
   AHasEvent := True;
 end;
 
-class procedure TTuiSequenceDecoder.ParseCsi(const ABuffer: TBytes; ACount: Integer;
-  out AConsumed: Integer; out AEvent: TTuiEvent; out AHasEvent: Boolean;
-  out ANeedMore: Boolean);
+class function TTuiSequenceDecoder.TryParseCsiSpecial(const ABuffer: TBytes;
+  ACount: Integer; out AConsumed: Integer; out AEvent: TTuiEvent;
+  out AHasEvent: Boolean; out ANeedMore: Boolean): Boolean;
 begin
-  // ABuffer[0..1] = ESC [ ; ACount >= 2.
+  Result := True;
   AConsumed := 0;
   AHasEvent := False;
   ANeedMore := False;
-
-  if ACount < 3 then
-  begin
-    ANeedMore := True;
-    Exit;
-  end;
 
   // Linux console function keys: ESC [ [ A..E = F1..F5
   if ABuffer[2] = Ord('[') then
@@ -419,13 +455,87 @@ begin
   if ABuffer[2] = Ord('M') then
   begin
     if ACount < 6 then
-    begin
-      ANeedMore := True;
-      Exit;
-    end;
-    AConsumed := 6;
+      ANeedMore := True
+    else
+      AConsumed := 6;
     Exit;
   end;
+
+  Result := False;
+end;
+
+class procedure TTuiSequenceDecoder.ScanCsiParams(const ABuffer: TBytes;
+  ACount: Integer; var AIndex: Integer; out AParams: TCsiParams;
+  out AParamCount: Integer);
+begin
+  // Collect up to 4 numeric parameters ($30..$3F bytes) separated by ';',
+  // then skip intermediates ($20..$2F). AIndex is left on the final byte
+  // (or at ACount when the sequence is still incomplete).
+  for var LInit := 0 to High(AParams) do
+    AParams[LInit] := 0;
+  AParamCount := 0;
+  var LCurrent := 0;
+  var LHasDigits := False;
+  var LInSubparam := False;
+  while (AIndex < ACount) and (ABuffer[AIndex] >= $30) and (ABuffer[AIndex] <= $3F) do
+  begin
+    var LByte := ABuffer[AIndex];
+    if (LByte >= Ord('0')) and (LByte <= Ord('9')) then
+    begin
+      // Digits after a ':' belong to a subparameter (kitty protocol, event
+      // types): keep only the primary value, never concatenate across ':'.
+      if not LInSubparam then
+      begin
+        LCurrent := LCurrent * 10 + (LByte - Ord('0'));
+        if LCurrent > CMaxCsiParam then
+          LCurrent := CMaxCsiParam;
+        LHasDigits := True;
+      end;
+    end
+    else if LByte = Ord(';') then
+    begin
+      if AParamCount <= High(AParams) then
+      begin
+        AParams[AParamCount] := LCurrent;
+        Inc(AParamCount);
+      end;
+      LCurrent := 0;
+      LHasDigits := False;
+      LInSubparam := False;
+    end
+    else if LByte = Ord(':') then
+      LInSubparam := True;
+    // Other parameter bytes ('<', '=', '>', '?') are skipped
+    Inc(AIndex);
+  end;
+  if LHasDigits and (AParamCount <= High(AParams)) then
+  begin
+    AParams[AParamCount] := LCurrent;
+    Inc(AParamCount);
+  end;
+
+  // Skip intermediates
+  while (AIndex < ACount) and (ABuffer[AIndex] >= $20) and (ABuffer[AIndex] <= $2F) do
+    Inc(AIndex);
+end;
+
+class procedure TTuiSequenceDecoder.ParseCsi(const ABuffer: TBytes; ACount: Integer;
+  out AConsumed: Integer; out AEvent: TTuiEvent; out AHasEvent: Boolean;
+  out ANeedMore: Boolean);
+begin
+  // ABuffer[0..1] = ESC [ ; ACount >= 2.
+  AConsumed := 0;
+  AHasEvent := False;
+  ANeedMore := False;
+
+  if ACount < 3 then
+  begin
+    ANeedMore := True;
+    Exit;
+  end;
+
+  if TryParseCsiSpecial(ABuffer, ACount, AConsumed, AEvent, AHasEvent, ANeedMore) then
+    Exit;
 
   // General CSI: parameters ($30..$3F), intermediates ($20..$2F), final ($40..$7E)
   var LIndex := 2;
@@ -443,54 +553,9 @@ begin
     Inc(LIndex);
   end;
 
-  // Collect up to 4 numeric parameters separated by ';'
-  var LParams: array[0..3] of Integer;
-  for var LInit := 0 to High(LParams) do
-    LParams[LInit] := 0;
-  var LParamCount := 0;
-  var LCurrent := 0;
-  var LHasDigits := False;
-  var LInSubparam := False;
-  while (LIndex < ACount) and (ABuffer[LIndex] >= $30) and (ABuffer[LIndex] <= $3F) do
-  begin
-    var LByte := ABuffer[LIndex];
-    if (LByte >= Ord('0')) and (LByte <= Ord('9')) then
-    begin
-      // Digits after a ':' belong to a subparameter (kitty protocol, event
-      // types): keep only the primary value, never concatenate across ':'.
-      if not LInSubparam then
-      begin
-        LCurrent := LCurrent * 10 + (LByte - Ord('0'));
-        if LCurrent > CMaxCsiParam then
-          LCurrent := CMaxCsiParam;
-        LHasDigits := True;
-      end;
-    end
-    else if LByte = Ord(';') then
-    begin
-      if LParamCount <= High(LParams) then
-      begin
-        LParams[LParamCount] := LCurrent;
-        Inc(LParamCount);
-      end;
-      LCurrent := 0;
-      LHasDigits := False;
-      LInSubparam := False;
-    end
-    else if LByte = Ord(':') then
-      LInSubparam := True;
-    // Other parameter bytes ('<', '=', '>', '?') are skipped
-    Inc(LIndex);
-  end;
-  if LHasDigits and (LParamCount <= High(LParams)) then
-  begin
-    LParams[LParamCount] := LCurrent;
-    Inc(LParamCount);
-  end;
-
-  // Skip intermediates
-  while (LIndex < ACount) and (ABuffer[LIndex] >= $20) and (ABuffer[LIndex] <= $2F) do
-    Inc(LIndex);
+  var LParams: TCsiParams;
+  var LParamCount: Integer;
+  ScanCsiParams(ABuffer, ACount, LIndex, LParams, LParamCount);
 
   if LIndex >= ACount then
   begin
@@ -655,55 +720,22 @@ begin
         AHasEvent := True;
         AConsumed := 1;
       end;
-    $7F, $08:
-      begin
-        // Meta/Alt + Backspace
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcBackspace, #0, [kmAlt]));
-        AHasEvent := True;
-        AConsumed := 2;
-      end;
-    $0D, $0A:
-      begin
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcEnter, #0, [kmAlt]));
-        AHasEvent := True;
-        AConsumed := 2;
-      end;
-    $09:
-      begin
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcTab, #0, [kmAlt]));
-        AHasEvent := True;
-        AConsumed := 2;
-      end;
-    $01..$07, $0B, $0C, $0E..$1A:
-      begin
-        // Alt+Ctrl+letter: keep the control byte like the Windows backend does
-        AEvent := TTuiEvent.MakeKey(
-          TTuiKeyEvent.Make(kcChar, Chr(ABuffer[1]), [kmCtrl, kmAlt]));
-        AHasEvent := True;
-        AConsumed := 2;
-      end;
-    Ord(' '):
-      begin
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcSpace, ' ', [kmAlt]));
-        AHasEvent := True;
-        AConsumed := 2;
-      end;
-    // Printable ASCII except 'O' ($4F) and '[' ($5B), which are the SS3/CSI
-    // introducers handled above: Pascal case labels must not overlap.
-    $21..$4E, $50..$5A, $5C..$7E:
-      begin
-        // Meta/Alt prefix on a printable ASCII key
-        AEvent := TTuiEvent.MakeKey(
-          TTuiKeyEvent.Make(kcChar, Chr(ABuffer[1]), [kmAlt]));
-        AHasEvent := True;
-        AConsumed := 2;
-      end;
   else
-    // ESC followed by a byte we do not understand (e.g. a UTF-8 lead):
-    // emit the Escape key and let the rest re-parse standalone.
-    AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcEscape, #0, []));
-    AHasEvent := True;
-    AConsumed := 1;
+    // '[' and 'O' (the CSI/SS3 introducers) are matched above, so every
+    // remaining byte maps like a standalone key with the Meta/Alt modifier.
+    if KeyFromControlByte(ABuffer[1], [kmAlt], AEvent) then
+    begin
+      AHasEvent := True;
+      AConsumed := 2;
+    end
+    else
+    begin
+      // ESC followed by a byte we do not understand (e.g. a UTF-8 lead):
+      // emit the Escape key and let the rest re-parse standalone.
+      AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcEscape, #0, []));
+      AHasEvent := True;
+      AConsumed := 1;
+    end;
   end;
 end;
 
@@ -728,45 +760,9 @@ begin
   end;
 
   AConsumed := 1;
-  case LB0 of
-    $0D, $0A:
-      begin
-        // Enter arrives as CR in raw mode (ICRNL cleared); Ctrl+J maps here too
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcEnter, #0, []));
-        AHasEvent := True;
-      end;
-    $09:
-      begin
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcTab, #0, []));
-        AHasEvent := True;
-      end;
-    $08, $7F:
-      begin
-        // Both BS and DEL map to Backspace: terminals disagree on which one
-        // the Backspace key sends.
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcBackspace, #0, []));
-        AHasEvent := True;
-      end;
-    Ord(' '):
-      begin
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcSpace, ' ', []));
-        AHasEvent := True;
-      end;
-    $01..$07, $0B, $0C, $0E..$1A:
-      begin
-        // Ctrl+letter: deliver the control byte itself with kmCtrl, exactly
-        // like the Windows backend (demos test AKey.Character = #17 etc.).
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcChar, Chr(LB0), [kmCtrl]));
-        AHasEvent := True;
-      end;
-    $21..$7E:
-      begin
-        AEvent := TTuiEvent.MakeKey(TTuiKeyEvent.Make(kcChar, Chr(LB0), []));
-        AHasEvent := True;
-      end;
-  else
-    // Remaining C0 bytes ($00, $1C..$1F): swallowed
-  end;
+  // Remaining C0 bytes ($00, $1C..$1F) are swallowed: the helper leaves
+  // AHasEvent False for them.
+  AHasEvent := KeyFromControlByte(LB0, [], AEvent);
 end;
 
 end.
