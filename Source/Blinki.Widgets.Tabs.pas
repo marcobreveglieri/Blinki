@@ -36,6 +36,7 @@ uses
   System.Classes,
   System.SysUtils,
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
   Blinki.Core.Style,
@@ -63,6 +64,9 @@ type
     FNormalStyleOverride: Boolean;
     FActiveStyleOverride: Boolean;
     FOnChange: TProc<Integer>;
+    // Header cell of each tab, cached by DoRender so mouse hit-testing
+    // always agrees with what was actually drawn.
+    FTabRects: TArray<TRect>;
     procedure SetActiveIndex(AValue: Integer);
     procedure SetNormalStyle(const AValue: TTuiStyle);
     procedure SetActiveStyle(const AValue: TTuiStyle);
@@ -183,32 +187,13 @@ end;
 function TTuiTabs.TabIndexAtPoint(AX, AY: Integer): Integer;
 begin
   Result := -1;
-  // Only the header row is interactive
+  // Only the header row is interactive. Test against the rects cached by
+  // the last DoRender, so render and hit-test can never drift apart.
   if AY <> LastRect.Top then
     Exit;
-  var LX := LastRect.Left;
-  for var LIndex := 0 to ChildCount - 1 do
-  begin
-    if LX >= LastRect.Right then
-      Break;
-    var LCaption: string;
-    if LIndex < FTabCaptions.Count then
-      LCaption := FTabCaptions[LIndex]
-    else
-      LCaption := '';
-    var LPadded := ' ' + LCaption + ' ';
-    if LX + Length(LPadded) > LastRect.Right then
-      LPadded := Copy(LPadded, 1, LastRect.Right - LX);
-    if (AX >= LX) and (AX < LX + Length(LPadded)) then
-    begin
-      Result := LIndex;
-      Exit;
-    end;
-    Inc(LX, Length(LPadded));
-    // Account for the separator between tabs
-    if (LIndex < ChildCount - 1) and (LX < LastRect.Right) then
-      Inc(LX);
-  end;
+  for var LIndex := 0 to High(FTabRects) do
+    if (AX >= FTabRects[LIndex].Left) and (AX < FTabRects[LIndex].Right) then
+      Exit(LIndex);
 end;
 
 function TTuiTabs.IsChildFocusTraversable(AIndex: Integer): Boolean;
@@ -237,11 +222,15 @@ begin
   var LHeaderRect := TRect.Create(ARect.Left, ARect.Top, ARect.Right, ARect.Top + 1);
   ACanvas.FillRect(LHeaderRect, ' ', FNormalStyle);
 
+  if Length(FTabRects) <> ChildCount then
+    SetLength(FTabRects, ChildCount);
+
   var LX := ARect.Left;
   for var LIndex := 0 to ChildCount - 1 do
   begin
+    FTabRects[LIndex] := TRect.Create(LX, ARect.Top, LX, ARect.Top + 1);
     if LX >= ARect.Right then
-      Break;
+      Continue; // no space left: leave an empty rect so hit-testing misses
 
     var LCaption: string;
     if LIndex < FTabCaptions.Count then
@@ -249,19 +238,20 @@ begin
     else
       LCaption := '';
 
-    var LPadded := ' ' + LCaption + ' ';
-
     var LStyle: TTuiStyle;
     if LIndex = FActiveIndex then
       LStyle := FActiveStyle
     else
       LStyle := FNormalStyle;
 
-    if LX + Length(LPadded) > ARect.Right then
-      LPadded := Copy(LPadded, 1, ARect.Right - LX);
+    // Truncate and advance by columns so wide glyphs (CJK, emoji) keep the
+    // header and the cached hit-test rects aligned.
+    var LPadded := TTuiAnsi.TruncateToWidth(' ' + LCaption + ' ', ARect.Right - LX);
+    var LWidth := TTuiAnsi.VisibleLength(LPadded);
 
     ACanvas.WriteAt(LX, ARect.Top, LPadded, LStyle);
-    Inc(LX, Length(LPadded));
+    FTabRects[LIndex] := TRect.Create(LX, ARect.Top, LX + LWidth, ARect.Top + 1);
+    Inc(LX, LWidth);
 
     // Separator between tabs (only if not the last one and space is available)
     if (LIndex < ChildCount - 1) and (LX < ARect.Right) then
