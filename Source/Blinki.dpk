@@ -75,6 +75,7 @@ contains
   Blinki.Widgets.TextArea in 'Blinki.Widgets.TextArea.pas',
   Blinki.Widgets.TextInput in 'Blinki.Widgets.TextInput.pas',
   Blinki.Widgets.Toast in 'Blinki.Widgets.Toast.pas',
+  Blinki.Widgets.Toggle in 'Blinki.Widgets.Toggle.pas',
   Blinki.Widgets.TypingEffect in 'Blinki.Widgets.TypingEffect.pas',
   Blinki.Widgets.WaveAnimation in 'Blinki.Widgets.WaveAnimation.pas';
 

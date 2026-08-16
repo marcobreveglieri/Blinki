@@ -22,7 +22,7 @@
 {****************************************************************}
 
 /// <summary>
-///   Widget TTuiCheckbox: single-line check box with label text.
+///   Widget TTuiCheckbox: two-state check box with Unicode glyph and caption.
 /// </summary>
 unit Blinki.Widgets.Checkbox;
 
@@ -34,13 +34,8 @@ interface
 
 uses
   System.SysUtils,
-  System.Types,
-  Blinki.Core.Ansi,
-  Blinki.Core.Canvas,
   Blinki.Core.Event,
-  Blinki.Core.Style,
-  Blinki.Core.Theme,
-  Blinki.Core.Widget;
+  Blinki.Widgets.Toggle;
 
 type
 
@@ -52,50 +47,18 @@ type
   ///   When focused, the text is drawn with the theme Primary colour.
   ///   Becomes focusable in DoInit.
   /// </summary>
-  TTuiCheckbox = class(TTuiWidget)
+  TTuiCheckbox = class(TTuiCustomToggle)
   strict private
-    FCaption: string;
-    FChecked: Boolean;
     FOnToggle: TProc<Boolean>;
-    FNormalStyle: TTuiStyle;
-    FFocusedStyle: TTuiStyle;
-    FNormalStyleOverride: Boolean;
-    FFocusedStyleOverride: Boolean;
-    procedure SetCaption(const AValue: string);
-    procedure SetChecked(AValue: Boolean);
-    procedure SetNormalStyle(const AValue: TTuiStyle);
-    procedure SetFocusedStyle(const AValue: TTuiStyle);
-    procedure RebuildStyles;
   protected
-    procedure DoInit; override;
-    procedure DoRender(const ACanvas: TTuiCanvas; const ARect: TRect); override;
     function  DoHandleEvent(const AEvent: TTuiEvent): Boolean; override;
-    procedure DoApplyTheme(const ATheme: TTuiTheme); override;
+    function  GlyphFor(AChecked: Boolean): string; override;
+    procedure SetChecked(AValue: Boolean); override;
   public
-    /// <summary>
-    /// Creates the check box. Initial Checked value: False. Becomes focusable after Init.
-    /// </summary>
-    constructor Create(AParent: TTuiWidget = nil);
-    /// <summary>
-    /// Label text displayed next to the glyph.
-    /// </summary>
-    property Caption: string read FCaption write SetCaption;
-    /// <summary>
-    /// Current checked state of the check box.
-    /// </summary>
-    property Checked: Boolean read FChecked write SetChecked;
     /// <summary>
     /// Fired when the state changes; receives the new Checked value.
     /// </summary>
     property OnToggle: TProc<Boolean> read FOnToggle write FOnToggle;
-    /// <summary>
-    /// Style used when the widget is unfocused. Assigning it disables automatic theme updates.
-    /// </summary>
-    property NormalStyle: TTuiStyle read FNormalStyle write SetNormalStyle;
-    /// <summary>
-    /// Style used when the widget is focused. Assigning it disables automatic theme updates.
-    /// </summary>
-    property FocusedStyle: TTuiStyle read FFocusedStyle write SetFocusedStyle;
   end;
 
 implementation
@@ -117,53 +80,22 @@ const
 
 { TTuiCheckbox }
 
-constructor TTuiCheckbox.Create(AParent: TTuiWidget);
+function TTuiCheckbox.GlyphFor(AChecked: Boolean): string;
 begin
-  inherited Create(AParent);
-  RebuildStyles;
+  if AChecked then
+    Result := CCheckboxChecked
+  else
+    Result := CCheckboxUnchecked;
 end;
 
-procedure TTuiCheckbox.RebuildStyles;
+procedure TTuiCheckbox.SetChecked(AValue: Boolean);
 begin
-  if not FNormalStyleOverride then
-    FNormalStyle := TTuiStyle.Create(Theme.Text, Theme.Surface);
-  if not FFocusedStyleOverride then
-    FFocusedStyle := TTuiStyle.Create(Theme.Primary, Theme.Surface);
-end;
-
-procedure TTuiCheckbox.DoInit;
-begin
-  SetFocusable(True);
-end;
-
-procedure TTuiCheckbox.DoApplyTheme(const ATheme: TTuiTheme);
-begin
-  RebuildStyles;
-end;
-
-procedure TTuiCheckbox.DoRender(const ACanvas: TTuiCanvas; const ARect: TRect);
-begin
-  if ARect.IsEmpty then
+  if CheckedState = AValue then
     Exit;
-
-  var LStyle: TTuiStyle;
-  if Focused then
-    LStyle := FFocusedStyle
-  else
-    LStyle := FNormalStyle;
-
-  ACanvas.FillRect(ARect, ' ', LStyle);
-
-  var LLine: string;
-  if FChecked then
-    LLine := CCheckboxChecked + ' ' + FCaption
-  else
-    LLine := CCheckboxUnchecked + ' ' + FCaption;
-
-  // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
-  LLine := TTuiAnsi.TruncateToWidth(LLine, ARect.Width);
-
-  ACanvas.WriteAt(ARect.Left, ARect.Top, LLine, LStyle);
+  CheckedState := AValue;
+  if Assigned(FOnToggle) then
+    FOnToggle(AValue);
+  Invalidate;
 end;
 
 function TTuiCheckbox.DoHandleEvent(const AEvent: TTuiEvent): Boolean;
@@ -173,45 +105,9 @@ begin
     Exit;
   if (AEvent.Key.Code = kcSpace) or (AEvent.Key.Code = kcEnter) then
   begin
-    SetChecked(not FChecked);
+    SetChecked(not Checked);
     Result := True;
   end;
-end;
-
-procedure TTuiCheckbox.SetChecked(AValue: Boolean);
-begin
-  if FChecked = AValue then
-    Exit;
-  FChecked := AValue;
-  if Assigned(FOnToggle) then
-    FOnToggle(FChecked);
-  Invalidate;
-end;
-
-procedure TTuiCheckbox.SetCaption(const AValue: string);
-begin
-  if FCaption = AValue then
-    Exit;
-  FCaption := AValue;
-  Invalidate;
-end;
-
-procedure TTuiCheckbox.SetNormalStyle(const AValue: TTuiStyle);
-begin
-  if FNormalStyle = AValue then
-    Exit;
-  FNormalStyle := AValue;
-  FNormalStyleOverride := True;
-  Invalidate;
-end;
-
-procedure TTuiCheckbox.SetFocusedStyle(const AValue: TTuiStyle);
-begin
-  if FFocusedStyle = AValue then
-    Exit;
-  FFocusedStyle := AValue;
-  FFocusedStyleOverride := True;
-  Invalidate;
 end;
 
 end.

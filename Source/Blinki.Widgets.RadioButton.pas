@@ -22,7 +22,7 @@
 {****************************************************************}
 
 /// <summary>
-///   Widget TTuiRadioButton: single-selection radio button for a group.
+///   Widget TTuiRadioButton: mutually exclusive selection within a sibling group.
 /// </summary>
 unit Blinki.Widgets.RadioButton;
 
@@ -33,65 +33,36 @@ unit Blinki.Widgets.RadioButton;
 interface
 
 uses
-  System.Types,
-  Blinki.Core.Ansi,
-  Blinki.Core.Canvas,
+  System.SysUtils,
   Blinki.Core.Event,
-  Blinki.Core.Style,
-  Blinki.Core.Theme,
-  Blinki.Core.Widget;
+  Blinki.Core.Widget,
+  Blinki.Widgets.Toggle;
 
 type
 
 { TTuiRadioButton }
 
   /// <summary>
-  ///   Single-line radio button: Unicode glyph + space + caption.
-  ///   Belongs to a group (Group: string); when the state changes to Checked=True,
-  ///   all other TTuiRadioButton instances sharing the same Group under the common
-  ///   parent are automatically unchecked.
-  ///   Pressing Space or Enter selects the radio button (if not already selected).
-  ///   OnSelect is invoked when this widget becomes selected.
+  ///   Single-line radio button: renders a Unicode glyph + space + caption.
+  ///   Radio buttons sharing the same Group and the same parent are mutually
+  ///   exclusive: checking one unchecks the others silently. Pressing Space
+  ///   or Enter selects the button and fires OnSelect.
   ///   Becomes focusable in DoInit.
   /// </summary>
-  TTuiRadioButton = class(TTuiWidget)
+  TTuiRadioButton = class(TTuiCustomToggle)
   strict private
-    FCaption: string;
-    FChecked: Boolean;
     FGroup: string;
     FOnSelect: TProc;
-    FNormalStyle: TTuiStyle;
-    FFocusedStyle: TTuiStyle;
-    FNormalStyleOverride: Boolean;
-    FFocusedStyleOverride: Boolean;
-    procedure SetCaption(const AValue: string);
-    procedure SetChecked(AValue: Boolean);
     procedure SetGroup(const AValue: string);
-    procedure SetNormalStyle(const AValue: TTuiStyle);
-    procedure SetFocusedStyle(const AValue: TTuiStyle);
-    procedure RebuildStyles;
     /// <summary>
     /// Unchecks the radio button without invoking OnSelect (used by group logic).
     /// </summary>
     procedure UncheckSilent;
   protected
-    procedure DoInit; override;
-    procedure DoRender(const ACanvas: TTuiCanvas; const ARect: TRect); override;
     function  DoHandleEvent(const AEvent: TTuiEvent): Boolean; override;
-    procedure DoApplyTheme(const ATheme: TTuiTheme); override;
+    function  GlyphFor(AChecked: Boolean): string; override;
+    procedure SetChecked(AValue: Boolean); override;
   public
-    /// <summary>
-    /// Creates the radio button. Initial Checked state: False. Becomes focusable after Init.
-    /// </summary>
-    constructor Create(AParent: TTuiWidget = nil);
-    /// <summary>
-    /// Label text displayed next to the glyph.
-    /// </summary>
-    property Caption: string read FCaption write SetCaption;
-    /// <summary>
-    /// Current selection state.
-    /// </summary>
-    property Checked: Boolean read FChecked write SetChecked;
     /// <summary>
     ///   Name of the belonging group. Radio buttons sharing the same Group and the same
     ///   parent are mutually exclusive. Empty string means anonymous group.
@@ -101,14 +72,6 @@ type
     /// Invoked when this radio button becomes selected (Checked transitions from False to True).
     /// </summary>
     property OnSelect: TProc read FOnSelect write FOnSelect;
-    /// <summary>
-    /// Style applied when the widget is unfocused. Assigning it disables automatic theme updates.
-    /// </summary>
-    property NormalStyle: TTuiStyle read FNormalStyle write SetNormalStyle;
-    /// <summary>
-    /// Style applied when the widget is focused. Assigning it disables automatic theme updates.
-    /// </summary>
-    property FocusedStyle: TTuiStyle read FFocusedStyle write SetFocusedStyle;
   end;
 
 implementation
@@ -130,44 +93,28 @@ const
 
 { TTuiRadioButton }
 
-constructor TTuiRadioButton.Create(AParent: TTuiWidget);
+function TTuiRadioButton.GlyphFor(AChecked: Boolean): string;
 begin
-  inherited Create(AParent);
-  RebuildStyles;
-end;
-
-procedure TTuiRadioButton.RebuildStyles;
-begin
-  if not FNormalStyleOverride then
-    FNormalStyle := TTuiStyle.Create(Theme.Text, Theme.Surface);
-  if not FFocusedStyleOverride then
-    FFocusedStyle := TTuiStyle.Create(Theme.Primary, Theme.Surface);
-end;
-
-procedure TTuiRadioButton.DoInit;
-begin
-  SetFocusable(True);
-end;
-
-procedure TTuiRadioButton.DoApplyTheme(const ATheme: TTuiTheme);
-begin
-  RebuildStyles;
+  if AChecked then
+    Result := CRadioChecked
+  else
+    Result := CRadioUnchecked;
 end;
 
 procedure TTuiRadioButton.UncheckSilent;
 begin
-  if not FChecked then
+  if not CheckedState then
     Exit;
-  FChecked := False;
+  CheckedState := False;
   Invalidate;
 end;
 
 procedure TTuiRadioButton.SetChecked(AValue: Boolean);
 begin
-  if FChecked = AValue then
+  if CheckedState = AValue then
     Exit;
-  FChecked := AValue;
-  if FChecked and Assigned(Parent) then
+  CheckedState := AValue;
+  if AValue and Assigned(Parent) then
   begin
     for var LIndex := 0 to Parent.ChildCount - 1 do
     begin
@@ -185,31 +132,6 @@ begin
   Invalidate;
 end;
 
-procedure TTuiRadioButton.DoRender(const ACanvas: TTuiCanvas; const ARect: TRect);
-begin
-  if ARect.IsEmpty then
-    Exit;
-
-  var LStyle: TTuiStyle;
-  if Focused then
-    LStyle := FFocusedStyle
-  else
-    LStyle := FNormalStyle;
-
-  ACanvas.FillRect(ARect, ' ', LStyle);
-
-  var LLine: string;
-  if FChecked then
-    LLine := CRadioChecked + ' ' + FCaption
-  else
-    LLine := CRadioUnchecked + ' ' + FCaption;
-
-  // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
-  LLine := TTuiAnsi.TruncateToWidth(LLine, ARect.Width);
-
-  ACanvas.WriteAt(ARect.Left, ARect.Top, LLine, LStyle);
-end;
-
 function TTuiRadioButton.DoHandleEvent(const AEvent: TTuiEvent): Boolean;
 begin
   Result := False;
@@ -217,18 +139,10 @@ begin
     Exit;
   if (AEvent.Key.Code = kcSpace) or (AEvent.Key.Code = kcEnter) then
   begin
-    if not FChecked then
+    if not Checked then
       SetChecked(True);
     Result := True;
   end;
-end;
-
-procedure TTuiRadioButton.SetCaption(const AValue: string);
-begin
-  if FCaption = AValue then
-    Exit;
-  FCaption := AValue;
-  Invalidate;
 end;
 
 procedure TTuiRadioButton.SetGroup(const AValue: string);
@@ -236,24 +150,6 @@ begin
   if FGroup = AValue then
     Exit;
   FGroup := AValue;
-end;
-
-procedure TTuiRadioButton.SetNormalStyle(const AValue: TTuiStyle);
-begin
-  if FNormalStyle = AValue then
-    Exit;
-  FNormalStyle := AValue;
-  FNormalStyleOverride := True;
-  Invalidate;
-end;
-
-procedure TTuiRadioButton.SetFocusedStyle(const AValue: TTuiStyle);
-begin
-  if FFocusedStyle = AValue then
-    Exit;
-  FFocusedStyle := AValue;
-  FFocusedStyleOverride := True;
-  Invalidate;
 end;
 
 end.
