@@ -772,8 +772,7 @@ begin
   ACanvas.DrawBox(LDlgRect, bsRounded, FTitle, FBorderStyle);
 
   // Compute the inner rectangle (inside the border).
-  var LInner := LDlgRect;
-  LInner.Inflate(-1, -1);
+  var LInner := LDlgRect.Interior;
   if LInner.IsEmpty then
     Exit;
 

@@ -179,8 +179,7 @@ begin
     ACanvas.DrawBox(ARect, bsRounded, '', FBorderStyle);
     if ChildCount = 1 then
     begin
-      var LInner := ARect;
-      LInner.Inflate(-1, -1);
+      var LInner := ARect.Interior;
       if not LInner.IsEmpty then
         Children[0].Render(ACanvas, LInner);
     end;

@@ -35,6 +35,7 @@ interface
 uses
   System.Types,
   Blinki.Core.Canvas,
+  Blinki.Core.Geometry,
   Blinki.Core.Style,
   Blinki.Core.Theme,
   Blinki.Core.Widget,
@@ -161,8 +162,7 @@ begin
     Exit;
   end;
   ACanvas.DrawBox(ARect, bsRounded, '', FBorderStyle);
-  var LInner := ARect;
-  LInner.Inflate(-1, -1);
+  var LInner := ARect.Interior;
   if LInner.IsEmpty then
     Exit;
   ACanvas.FillRect(LInner, ' ', FTextStyle);

@@ -37,6 +37,7 @@ uses
   System.Types,
   Blinki.Core.Ansi,
   Blinki.Core.Canvas,
+  Blinki.Core.Geometry,
   Blinki.Core.Style,
   Blinki.Core.Theme,
   Blinki.Core.Widget;
@@ -144,8 +145,7 @@ begin
   ACanvas.DrawBox(ARect, FBoxStyle, FTitle, FBorderStyle);
   if ChildCount = 1 then
   begin
-    var LInner := ARect;
-    LInner.Inflate(-1, -1);
+    var LInner := ARect.Interior;
     if not LInner.IsEmpty then
       Children[0].Render(ACanvas, LInner);
   end;

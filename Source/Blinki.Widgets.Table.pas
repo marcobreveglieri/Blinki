@@ -39,6 +39,7 @@ uses
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
+  Blinki.Core.Geometry,
   Blinki.Core.Style,
   Blinki.Core.Theme,
   Blinki.Core.Widget;
@@ -579,8 +580,7 @@ begin
   if FShowBorder then
   begin
     ACanvas.DrawBox(ARect, bsRounded, '', FSepStyle);
-    LInner := TRect.Create(ARect.Left + 1, ARect.Top + 1,
-                           ARect.Right - 1, ARect.Bottom - 1);
+    LInner := ARect.Interior;
   end
   else
     LInner := ARect;
