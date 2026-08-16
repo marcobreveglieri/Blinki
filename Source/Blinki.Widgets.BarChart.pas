@@ -145,11 +145,16 @@ uses
 const
 
   // Vertical blocks U+2581..U+2588 — increasing height from 1/8 to 8/8
-  CBlocksVert: array[0..7] of string = (
+  CBlocksVert: array[0..7] of Char = (
     #$2581, #$2582, #$2583, #$2584,
     #$2585, #$2586, #$2587, #$2588);
 
   CYAxisWidth = 6;  // e.g. "100.0 " — 5 digits + separator
+
+  CGlyphAxisRule = #$2502; // │
+
+  // '0' left-padded to the CYAxisWidth - 1 label width
+  CZeroAxisLabel = '0    ';
 
 { TTuiBarChart }
 
@@ -334,16 +339,17 @@ begin
   if FShowYAxis then
   begin
     // Maximum value
-    var LFmtStr := Format('%-5s', [FormatFloat('0.##', LEffMax)]);
+    var LFmtStr := Format('%-*s', [CYAxisWidth - 1, FormatFloat('0.##', LEffMax)]);
     if Length(LFmtStr) > LYAxisW - 1 then
       LFmtStr := Copy(LFmtStr, 1, LYAxisW - 1);
     ACanvas.WriteAt(ARect.Left, LBarAreaTop, LFmtStr, LDimStyle);
     // Zero value
-    LFmtStr := Format('%-5s', ['0']);
-    ACanvas.WriteAt(ARect.Left, LBarAreaBottom, LFmtStr, LDimStyle);
+    ACanvas.WriteAt(ARect.Left, LBarAreaBottom, CZeroAxisLabel, LDimStyle);
     // Vertical separator
-    for var LRow := LBarAreaTop to LBarAreaBottom do
-      ACanvas.WriteAt(ARect.Left + LYAxisW - 1, LRow, #$2502, LDimStyle);
+    ACanvas.FillRect(
+      TRect.Create(ARect.Left + LYAxisW - 1, LBarAreaTop,
+        ARect.Left + LYAxisW, LBarAreaBottom + 1),
+      CGlyphAxisRule, LDimStyle);
   end;
 
   // Draw the bars
@@ -364,27 +370,28 @@ begin
     var LEighths := Round(FBars[LIndex].Value / LEffMax * LBarH * 8);
     var LFullBlocks := LEighths div 8;
     var LRem := LEighths mod 8;
-
-    // Draw each row of the bar area
-    var LRowFromBottom: Integer;
-    for var LRow := LBarAreaTop to LBarAreaBottom do
+    if LFullBlocks > LBarH then
     begin
-      // LRowFromBottom: 0 = bottom, LBarH-1 = top
-      LRowFromBottom := LBarAreaBottom - LRow;
+      // Value above the effective max: clamp to a fully filled bar.
+      LFullBlocks := LBarH;
+      LRem := 0;
+    end;
 
-      if LRowFromBottom < LFullBlocks then
-      begin
-        // Full block: fills all columns of the bar
-        for var LCol := 0 to Min(LBarW, ARect.Right - LBarX) - 1 do
-          ACanvas.WriteAt(LBarX + LCol, LRow, CBlocksVert[7], LBarStyle);
-      end
-      else if (LRowFromBottom = LFullBlocks) and (LRem > 0) then
-      begin
-        // Partial row (top of the bar)
-        for var LCol := 0 to Min(LBarW, ARect.Right - LBarX) - 1 do
-          ACanvas.WriteAt(LBarX + LCol, LRow, CBlocksVert[LRem - 1], LBarStyle);
-      end;
-      // else: empty row (already covered by FillRect)
+    // Full region and partial top cap, each as a single FillRect instead
+    // of one WriteAt per cell. Empty rows stay covered by the outer fill.
+    var LVisibleW := Min(LBarW, ARect.Right - LBarX);
+    if LVisibleW > 0 then
+    begin
+      if LFullBlocks > 0 then
+        ACanvas.FillRect(
+          TRect.Create(LBarX, LBarAreaBottom - LFullBlocks + 1,
+            LBarX + LVisibleW, LBarAreaBottom + 1),
+          CBlocksVert[High(CBlocksVert)], LBarStyle);
+      if (LRem > 0) and (LFullBlocks < LBarH) then
+        ACanvas.FillRect(
+          TRect.Create(LBarX, LBarAreaBottom - LFullBlocks,
+            LBarX + LVisibleW, LBarAreaBottom - LFullBlocks + 1),
+          CBlocksVert[LRem - 1], LBarStyle);
     end;
 
     // Label below the bar
