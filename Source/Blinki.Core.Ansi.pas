@@ -323,6 +323,56 @@ const
   BEL   = #7;
   CRESET = #27'[0m';
 
+  // SGR base codes: foreground 30, background 40. +60 selects the bright
+  // variant, +8 the extended (256-color / RGB) introducer.
+  CSgrFgBase = 30;
+  CSgrBgBase = 40;
+  CSgrBrightOffset = 60;
+  CSgrExtendedOffset = 8;
+
+  // Precomputed sequences for the 16 classic colors: ApplyStyleDelta calls
+  // SetForeground/SetBackground on every style run of every flush, so the
+  // common ck16 path must not allocate.
+  CFg16: array[0..15] of string = (
+    CSI + '30m', CSI + '31m', CSI + '32m', CSI + '33m',
+    CSI + '34m', CSI + '35m', CSI + '36m', CSI + '37m',
+    CSI + '90m', CSI + '91m', CSI + '92m', CSI + '93m',
+    CSI + '94m', CSI + '95m', CSI + '96m', CSI + '97m');
+  CBg16: array[0..15] of string = (
+    CSI + '40m', CSI + '41m', CSI + '42m', CSI + '43m',
+    CSI + '44m', CSI + '45m', CSI + '46m', CSI + '47m',
+    CSI + '100m', CSI + '101m', CSI + '102m', CSI + '103m',
+    CSI + '104m', CSI + '105m', CSI + '106m', CSI + '107m');
+
+var
+  // Lazily-built cache of SGR attribute sequences keyed by Byte(AAttrs):
+  // 7 attribute flags yield at most 128 distinct sets. An empty slot means
+  // "not built yet" (every cached sequence is non-empty).
+  AttrSeqCache: array[0..127] of string;
+
+// Shared builder for SetForeground/SetBackground, which differ only in the
+// SGR base code and the precomputed 16-color table.
+function ColorSequence(const AColor: TTuiColor; ABase: Integer;
+  const ATable16: array of string): string;
+begin
+  case AColor.Kind of
+    ck16:
+      if AColor.R <= High(ATable16) then
+        Result := ATable16[AColor.R]
+      else
+        Result := CSI + IntToStr(ABase + CSgrBrightOffset + (AColor.R - 8)) + 'm';
+    ck256:
+      Result := CSI + IntToStr(ABase + CSgrExtendedOffset) + ';5;' +
+        IntToStr(AColor.R) + 'm';
+    ckRGB:
+      Result := CSI + IntToStr(ABase + CSgrExtendedOffset) + ';2;' +
+        IntToStr(AColor.R) + ';' + IntToStr(AColor.G) + ';' +
+        IntToStr(AColor.B) + 'm';
+  else
+    Result := '';
+  end;
+end;
+
 { TTuiAnsi }
 
 class function TTuiAnsi.Reset: string;
@@ -332,42 +382,12 @@ end;
 
 class function TTuiAnsi.SetForeground(const AColor: TTuiColor): string;
 begin
-  case AColor.Kind of
-    ckDefault:
-      Result := '';
-    ck16:
-      if AColor.R < 8 then
-        Result := CSI + IntToStr(30 + AColor.R) + 'm'
-      else
-        Result := CSI + IntToStr(90 + (AColor.R - 8)) + 'm';
-    ck256:
-      Result := CSI + '38;5;' + IntToStr(AColor.R) + 'm';
-    ckRGB:
-      Result := CSI + '38;2;' + IntToStr(AColor.R) + ';' +
-        IntToStr(AColor.G) + ';' + IntToStr(AColor.B) + 'm';
-  else
-    Result := '';
-  end;
+  Result := ColorSequence(AColor, CSgrFgBase, CFg16);
 end;
 
 class function TTuiAnsi.SetBackground(const AColor: TTuiColor): string;
 begin
-  case AColor.Kind of
-    ckDefault:
-      Result := '';
-    ck16:
-      if AColor.R < 8 then
-        Result := CSI + IntToStr(40 + AColor.R) + 'm'
-      else
-        Result := CSI + IntToStr(100 + (AColor.R - 8)) + 'm';
-    ck256:
-      Result := CSI + '48;5;' + IntToStr(AColor.R) + 'm';
-    ckRGB:
-      Result := CSI + '48;2;' + IntToStr(AColor.R) + ';' +
-        IntToStr(AColor.G) + ';' + IntToStr(AColor.B) + 'm';
-  else
-    Result := '';
-  end;
+  Result := ColorSequence(AColor, CSgrBgBase, CBg16);
 end;
 
 class function TTuiAnsi.SetAttributes(AAttrs: TTuiTextAttrs): string;
@@ -376,6 +396,9 @@ const
 begin
   if AAttrs = [] then
     Exit('');
+  var LKey := Byte(AAttrs);
+  if AttrSeqCache[LKey] <> '' then
+    Exit(AttrSeqCache[LKey]);
   var LParams := '';
   for var LAttr := Low(TTuiTextAttr) to High(TTuiTextAttr) do
     if LAttr in AAttrs then
@@ -384,7 +407,8 @@ begin
         LParams := LParams + ';';
       LParams := LParams + AttrCodes[LAttr];
     end;
-  Result := CSI + LParams + 'm';
+  AttrSeqCache[LKey] := CSI + LParams + 'm';
+  Result := AttrSeqCache[LKey];
 end;
 
 class function TTuiAnsi.ApplyStyle(const AStyle: TTuiStyle): string;
