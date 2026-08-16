@@ -172,14 +172,16 @@ begin
   if FPasswordChar <> #0 then
   begin
     // One mask character per grapheme cluster, so an emoji counts as a
-    // single masked position, not one per UTF-16 code unit.
-    Result := '';
+    // single masked position, not one per UTF-16 code unit. Count first,
+    // then build in one shot: this runs on every frame in password mode.
+    var LCount := 0;
     var LIndex := 1;
     while LIndex <= Length(FText) do
     begin
-      Result := Result + FPasswordChar;
+      Inc(LCount);
       LIndex := TTuiUnicode.NextGraphemeBoundary(FText, LIndex);
     end;
+    Result := StringOfChar(FPasswordChar, LCount);
   end
   else
     Result := FText;

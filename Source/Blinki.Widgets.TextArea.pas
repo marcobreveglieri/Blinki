@@ -227,12 +227,20 @@ end;
 
 function TTuiTextArea.GetText: string;
 begin
-  Result := '';
-  for var I := 0 to FLines.Count - 1 do
-  begin
-    if I > 0 then
-      Result := Result + sLineBreak;
-    Result := Result + FLines[I];
+  // Called on every text change (and thus every keystroke): build with a
+  // TStringBuilder instead of quadratic concatenation. FLines.Text is not
+  // equivalent — it appends a trailing line break.
+  var LBuilder := TStringBuilder.Create;
+  try
+    for var I := 0 to FLines.Count - 1 do
+    begin
+      if I > 0 then
+        LBuilder.Append(sLineBreak);
+      LBuilder.Append(FLines[I]);
+    end;
+    Result := LBuilder.ToString;
+  finally
+    LBuilder.Free;
   end;
 end;
 
