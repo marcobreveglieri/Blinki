@@ -92,6 +92,7 @@ type
       const ARect: TRect; AViewHeight: Integer);
     procedure DrawHorizontalScrollbar(const ACanvas: TTuiCanvas;
       const ARect: TRect; AViewWidth: Integer);
+    function  ScrollBy(ADX, ADY: Integer): Boolean;
   protected
     /// <summary>
     ///   Sets Focusable=True when the direction includes at least one scroll axis.
@@ -204,6 +205,15 @@ begin
   end
   else
     FOffsetY := 0;
+end;
+
+function TTuiScrollable.ScrollBy(ADX, ADY: Integer): Boolean;
+begin
+  Inc(FOffsetX, ADX);
+  Inc(FOffsetY, ADY);
+  ClampOffset(FLastViewSize);
+  Invalidate;
+  Result := True;
 end;
 
 procedure TTuiScrollable.DrawVerticalScrollbar(const ACanvas: TTuiCanvas;
@@ -374,67 +384,28 @@ begin
   case AEvent.Key.Code of
     kcUp:
       if HasVertical then
-      begin
-        Dec(FOffsetY);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(0, -1);
     kcDown:
       if HasVertical then
-      begin
-        Inc(FOffsetY);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(0, 1);
     kcLeft:
       if HasHorizontal then
-      begin
-        Dec(FOffsetX);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(-1, 0);
     kcRight:
       if HasHorizontal then
-      begin
-        Inc(FOffsetX);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(1, 0);
     kcPageUp:
       if HasVertical then
-      begin
-        Dec(FOffsetY, LPageH);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(0, -LPageH);
     kcPageDown:
       if HasVertical then
-      begin
-        Inc(FOffsetY, LPageH);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(0, LPageH);
     kcHome:
       if HasVertical then
-      begin
-        FOffsetY := 0;
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(0, -FOffsetY);
     kcEnd:
       if HasVertical then
-      begin
-        FOffsetY := Max(0, FContentSize.cy - LPageH);
-        ClampOffset(FLastViewSize);
-        Invalidate;
-        Result := True;
-      end;
+        Result := ScrollBy(0, Max(0, FContentSize.cy - LPageH) - FOffsetY);
   end;
 end;
 
