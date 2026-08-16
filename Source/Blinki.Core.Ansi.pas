@@ -40,6 +40,7 @@ unit Blinki.Core.Ansi;
 interface
 
 uses
+  System.SysUtils,
   Blinki.Core.Style;
 
 type
@@ -151,6 +152,13 @@ type
     ///   terminal would retain the previous color).
     /// </remarks>
     class function ApplyStyleDelta(const APrev, ANext: TTuiStyle): string; static;
+
+    /// <summary>
+    ///   Appends the same sequences as ApplyStyleDelta directly to ABuilder,
+    ///   avoiding the intermediate string on the per-frame flush path.
+    /// </summary>
+    class procedure AppendStyleDelta(ABuilder: TStringBuilder;
+      const APrev, ANext: TTuiStyle); static;
     {$ENDREGION}
     {$REGION 'Cursor control'}
     /// <summary>
@@ -160,6 +168,13 @@ type
     ///   Coordinates are 1-based.
     /// </remarks>
     class function CursorTo(ARow, ACol: Integer): string; static;
+
+    /// <summary>
+    ///   Appends the CursorTo sequence directly to ABuilder, avoiding the
+    ///   intermediate string on the per-frame flush path.
+    /// </summary>
+    class procedure AppendCursorTo(ABuilder: TStringBuilder;
+      ARow, ACol: Integer); static;
 
     /// <summary>
     ///   Moves the cursor up by N rows.
@@ -313,7 +328,6 @@ implementation
 
 uses
   System.Classes,
-  System.SysUtils,
   Blinki.Core.Unicode;
 
 const
@@ -436,9 +450,35 @@ begin
     Result := Result + SetAttributes(ANext.Attributes - APrev.Attributes);
 end;
 
+class procedure TTuiAnsi.AppendStyleDelta(ABuilder: TStringBuilder;
+  const APrev, ANext: TTuiStyle);
+begin
+  if APrev = ANext then
+    Exit;
+  if ((APrev.Attributes - ANext.Attributes) <> []) or
+     ((APrev.Foreground.Kind <> ckDefault) and (ANext.Foreground.Kind = ckDefault)) or
+     ((APrev.Background.Kind <> ckDefault) and (ANext.Background.Kind = ckDefault)) then
+  begin
+    ABuilder.Append(ApplyStyle(ANext));
+    Exit;
+  end;
+  if APrev.Foreground <> ANext.Foreground then
+    ABuilder.Append(SetForeground(ANext.Foreground));
+  if APrev.Background <> ANext.Background then
+    ABuilder.Append(SetBackground(ANext.Background));
+  if (ANext.Attributes - APrev.Attributes) <> [] then
+    ABuilder.Append(SetAttributes(ANext.Attributes - APrev.Attributes));
+end;
+
 class function TTuiAnsi.CursorTo(ARow, ACol: Integer): string;
 begin
   Result := CSI + IntToStr(ARow) + ';' + IntToStr(ACol) + 'H';
+end;
+
+class procedure TTuiAnsi.AppendCursorTo(ABuilder: TStringBuilder;
+  ARow, ACol: Integer);
+begin
+  ABuilder.Append(CSI).Append(ARow).Append(';').Append(ACol).Append('H');
 end;
 
 class function TTuiAnsi.CursorUp(N: Integer): string;

@@ -74,6 +74,10 @@ type
     FBackHasGlyphSpans: Boolean;
     FDirty: Boolean;
     FClipStack: TStack<TRect>;
+    // Cached top of FClipStack (or the full buffer when the stack is
+    // empty): WriteCell reads it for every single cell, so it must not
+    // touch the stack. Kept in sync by PushClip/PopClip/RefreshClipRect.
+    FClipRect: TRect;
     // Reused across Flush calls to avoid a Width * Height * 8 allocation
     // (and Free) on every frame; BuildFlushSequence just Clears it.
     FFlushBuilder: TStringBuilder;
@@ -83,6 +87,7 @@ type
     procedure WriteCell(AX, AY: Integer; const ACell: TTuiCell);
     function  ClampRect(const ARect: TRect): TRect;
     function  ActiveClipRect: TRect; inline;
+    procedure RefreshClipRect;
     function  BuildFlushSequence: string;
   public
     /// <summary>
@@ -194,6 +199,7 @@ begin
   FFront := TTuiFrameBuffer.Create(LSize.cx, LSize.cy);
   FBack := TTuiFrameBuffer.Create(LSize.cx, LSize.cy);
   FFlushBuilder := TStringBuilder.Create(LSize.cx * LSize.cy * 8);
+  RefreshClipRect;
 end;
 
 destructor TTuiCanvas.Destroy;
@@ -221,10 +227,15 @@ end;
 
 function TTuiCanvas.ActiveClipRect: TRect;
 begin
+  Result := FClipRect;
+end;
+
+procedure TTuiCanvas.RefreshClipRect;
+begin
   if FClipStack.Count > 0 then
-    Result := FClipStack.Peek
+    FClipRect := FClipStack.Peek
   else
-    Result := TRect.Create(0, 0, FBack.Width, FBack.Height);
+    FClipRect := TRect.Create(0, 0, FBack.Width, FBack.Height);
 end;
 
 procedure TTuiCanvas.BlankGlyphSpan(AX, AY: Integer);
@@ -298,21 +309,21 @@ end;
 
 procedure TTuiCanvas.PushClip(const ARect: TRect);
 begin
-  var LCurrent := ActiveClipRect;
-  var LNew: TRect;
-  LNew := TRect.Create(
-    Max(ARect.Left, LCurrent.Left),
-    Max(ARect.Top, LCurrent.Top),
-    Min(ARect.Right, LCurrent.Right),
-    Min(ARect.Bottom, LCurrent.Bottom)
+  var LNew := TRect.Create(
+    Max(ARect.Left, FClipRect.Left),
+    Max(ARect.Top, FClipRect.Top),
+    Min(ARect.Right, FClipRect.Right),
+    Min(ARect.Bottom, FClipRect.Bottom)
   );
   FClipStack.Push(LNew);
+  FClipRect := LNew;
 end;
 
 procedure TTuiCanvas.PopClip;
 begin
   if FClipStack.Count > 0 then
     FClipStack.Pop;
+  RefreshClipRect;
 end;
 
 procedure TTuiCanvas.Clear;
@@ -415,25 +426,13 @@ begin
       LTitleWidth := TTuiAnsi.VisibleLength(LTitleStr);
     end;
     var LPadLeft := (LInnerWidth - LTitleWidth) div 2;
-    LTopLine := LChars.TopLeft;
-    for var LIndex := 1 to LPadLeft do
-      LTopLine := LTopLine + LChars.Horizontal;
-    LTopLine := LTopLine + LTitleStr;
-    var LUsedWidth := 1 + LPadLeft + LTitleWidth;
-    while LUsedWidth < ARect.Width - 1 do
-    begin
-      LTopLine := LTopLine + LChars.Horizontal;
-      Inc(LUsedWidth);
-    end;
-    LTopLine := LTopLine + LChars.TopRight;
+    var LPadRight := ARect.Width - 1 - (1 + LPadLeft + LTitleWidth);
+    LTopLine := LChars.TopLeft + StringOfChar(LChars.Horizontal, LPadLeft) +
+      LTitleStr + StringOfChar(LChars.Horizontal, LPadRight) + LChars.TopRight;
   end
   else
-  begin
-    LTopLine := LChars.TopLeft;
-    for var LIndex := 1 to LInnerWidth do
-      LTopLine := LTopLine + LChars.Horizontal;
-    LTopLine := LTopLine + LChars.TopRight;
-  end;
+    LTopLine := LChars.TopLeft + StringOfChar(LChars.Horizontal, LInnerWidth) +
+      LChars.TopRight;
 
   WriteAt(ARect.Left, ARect.Top, LTopLine, AStyle);
 
@@ -498,9 +497,9 @@ begin
 
       // CursorTo only if not in the cell adjacent to the previous one
       if (LY <> LLastY) or (LEmitX <> LLastX + 1) then
-        LBuilder.Append(TTuiAnsi.CursorTo(LY + 1, LEmitX + 1));
+        TTuiAnsi.AppendCursorTo(LBuilder, LY + 1, LEmitX + 1);
 
-      LBuilder.Append(TTuiAnsi.ApplyStyleDelta(LLastStyle, LCell.Style));
+      TTuiAnsi.AppendStyleDelta(LBuilder, LLastStyle, LCell.Style);
       // Plain cells append the Char directly (no string allocation on the
       // hot diff loop); only cluster cells resolve their interned text.
       if LCell.ClusterId = 0 then
@@ -562,6 +561,7 @@ begin
   FFront.Resize(ANewSize.cx, ANewSize.cy);
   FBackHasGlyphSpans := False;
   FDirty := True;
+  RefreshClipRect;
 end;
 
 procedure TTuiCanvas.HandleResize;
