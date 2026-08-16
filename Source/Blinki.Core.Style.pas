@@ -258,9 +258,7 @@ begin
   case A.Kind of
     ckDefault:
       Result := True;
-    ck16:
-      Result := A.R = B.R;
-    ck256:
+    ck16, ck256:
       Result := A.R = B.R;
     ckRGB:
       Result := (A.R = B.R) and (A.G = B.G) and (A.B = B.B);

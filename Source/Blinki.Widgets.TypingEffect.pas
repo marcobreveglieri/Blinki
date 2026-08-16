@@ -146,37 +146,38 @@ end;
 
 procedure TTuiTypingEffect.DoTick(AElapsedMs: Integer);
 begin
-  if FActive then
+  if not FActive then
+    Exit;
+
+  Inc(FAccumMs, AElapsedMs);
+  var LStep := CMSecsPerSecond div Max(1, FCharsPerSecond);
+  while FAccumMs >= LStep do
   begin
-    Inc(FAccumMs, AElapsedMs);
-    var LStep := CMSecsPerSecond div Max(1, FCharsPerSecond);
-    while FAccumMs >= LStep do
+    Dec(FAccumMs, LStep);
+    if FVisibleCount < Length(FText) then
     begin
-      Dec(FAccumMs, LStep);
-      if FVisibleCount < Length(FText) then
+      Inc(FVisibleCount);
+      if FVisibleCount >= Length(FText) then
       begin
-        Inc(FVisibleCount);
-        if FVisibleCount >= Length(FText) then
-        begin
-          FActive := False;
-          if Assigned(FOnComplete) then
-            FOnComplete;
-        end;
+        FActive := False;
+        if Assigned(FOnComplete) then
+          FOnComplete;
       end;
     end;
-    Invalidate;
   end;
+  Invalidate;
 
-  // Blinking cursor always active during the animation
-  if FActive then
+  // The animation may have just completed above; the cursor only blinks
+  // while it is still running.
+  if not FActive then
+    Exit;
+
+  Inc(FBlinkAccum, AElapsedMs);
+  if FBlinkAccum >= CCursorBlinkMs then
   begin
-    Inc(FBlinkAccum, AElapsedMs);
-    if FBlinkAccum >= CCursorBlinkMs then
-    begin
-      Dec(FBlinkAccum, CCursorBlinkMs);
-      FBlinkOn := not FBlinkOn;
-      Invalidate;
-    end;
+    Dec(FBlinkAccum, CCursorBlinkMs);
+    FBlinkOn := not FBlinkOn;
+    Invalidate;
   end;
 end;
 
