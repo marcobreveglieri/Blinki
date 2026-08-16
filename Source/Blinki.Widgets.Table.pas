@@ -151,6 +151,12 @@ type
     procedure ApplySort;
     function  RowsMatch(const A, B: TArray<string>): Boolean;
     procedure RebuildStyles;
+    procedure RenderBodyRows(const ACanvas: TTuiCanvas; const AInner: TRect;
+      const AWidths: TArray<Integer>; ABodyTop, AViewH: Integer);
+    procedure RenderHeader(const ACanvas: TTuiCanvas; const AInner: TRect;
+      const AWidths: TArray<Integer>);
+    procedure RenderSeparatorRow(const ACanvas: TTuiCanvas; const AInner: TRect;
+      const AWidths: TArray<Integer>);
   protected
     procedure DoInit; override;
     procedure DoRender(const ACanvas: TTuiCanvas; const ARect: TRect); override;
@@ -218,32 +224,31 @@ uses
   Blinki.Core.Ansi,
   Blinki.Core.Input;
 
+const
+  CGlyphVSeparator = #$2502; // │
+  CGlyphHSeparator = #$2500; // ─
+  CGlyphJunction   = #$253C; // ┼
+  CGlyphSortAsc    = #$25B2; // ▲
+  CGlyphSortDesc   = #$25BC; // ▼
+
 /// <summary>
-///   Align the text in a cell given a width in characters.
+///   Truncates the text of a cell to AWidth columns and returns in AOffset
+///   the column where drawing must start for the requested alignment. The
+///   caller fills the cell background beforehand, so no space padding is
+///   allocated per cell per frame.
 /// </summary>
 function CellText(const AText: string; AWidth: Integer;
-  AAlign: TTuiTableAlignment): string;
+  AAlign: TTuiTableAlignment; out AOffset: Integer): string;
 begin
+  AOffset := 0;
   if AWidth <= 0 then
-  begin
-    Result := '';
-    Exit;
-  end;
-  var LTrunc := TTuiAnsi.TruncateToWidth(AText, AWidth);
-  var LVisibleLen := TTuiAnsi.VisibleLength(LTrunc);
+    Exit('');
+  Result := TTuiAnsi.TruncateToWidth(AText, AWidth);
   case AAlign of
-    taLeft:
-      Result := LTrunc + StringOfChar(' ', AWidth - LVisibleLen);
     taRight:
-      Result := StringOfChar(' ', AWidth - LVisibleLen) + LTrunc;
+      AOffset := AWidth - TTuiAnsi.VisibleLength(Result);
     taCenter:
-    begin
-      var LPad := (AWidth - LVisibleLen) div 2;
-      Result := StringOfChar(' ', LPad) + LTrunc
-              + StringOfChar(' ', AWidth - LVisibleLen - LPad);
-    end;
-  else
-    Result := LTrunc + StringOfChar(' ', AWidth - LVisibleLen);
+      AOffset := (AWidth - TTuiAnsi.VisibleLength(Result)) div 2;
   end;
 end;
 
@@ -587,77 +592,14 @@ begin
   var LWidths: TArray<Integer>;
   ComputeWidths(LInner.Width, LWidths);
 
-  // Header
-  var LHeaderRows: Integer;
+  var LHeaderRows := 0;
   if FShowHeader then
   begin
-    // Column caption row
-    var LColX := LInner.Left;
-    for var LI := 0 to FColCount - 1 do
-    begin
-      if LColX >= LInner.Right then
-        Break;
-      var LStyle: TTuiStyle;
-      if LI = FSortFocus then
-        LStyle := FHeaderFocusStyle
-      else
-        LStyle := FHeaderNormalStyle;
-      // Compute caption with sort indicator
-      var LSortMark: string;
-      if (LI = FSortColumn) and (FSortDir <> sdNone) then
-      begin
-        if FSortDir = sdAsc then
-          LSortMark := #$25B2  // ▲
-        else
-          LSortMark := #$25BC; // ▼
-      end
-      else
-        LSortMark := '';
-      var LCaption := FColumns[LI].Caption;
-      if LSortMark <> '' then
-        LCaption := LCaption + ' ' + LSortMark;
-      LCaption := CellText(LCaption, LWidths[LI], taLeft);
-      ACanvas.FillRect(
-        TRect.Create(LColX, LInner.Top, Min(LColX + LWidths[LI], LInner.Right), LInner.Top + 1),
-        ' ', LStyle);
-      ACanvas.WriteAt(LColX, LInner.Top, LCaption, LStyle);
-      Inc(LColX, LWidths[LI]);
-      // Vertical separator
-      if LI < FColCount - 1 then
-      begin
-        if LColX < LInner.Right then
-          ACanvas.WriteAt(LColX, LInner.Top, #$2502, FSepStyle);
-        Inc(LColX);
-      end;
-    end;
-
-    // Horizontal separator header/body
+    RenderHeader(ACanvas, LInner, LWidths);
     if LInner.Top + 1 < LInner.Bottom then
-    begin
-      LColX := LInner.Left;
-      for var LI := 0 to FColCount - 1 do
-      begin
-        if LColX >= LInner.Right then
-          Break;
-        for var LJ := 0 to LWidths[LI] - 1 do
-        begin
-          if LColX + LJ < LInner.Right then
-            ACanvas.WriteAt(LColX + LJ, LInner.Top + 1, #$2500, FSepStyle);
-        end;
-        Inc(LColX, LWidths[LI]);
-        if LI < FColCount - 1 then
-        begin
-          if LColX < LInner.Right then
-            ACanvas.WriteAt(LColX, LInner.Top + 1, #$253C, FSepStyle);
-          Inc(LColX);
-        end;
-      end;
-    end;
-
+      RenderSeparatorRow(ACanvas, LInner, LWidths);
     LHeaderRows := 2;
-  end
-  else
-    LHeaderRows := 0;
+  end;
 
   var LBodyTop := LInner.Top + LHeaderRows;
   var LViewH := LInner.Bottom - LBodyTop;
@@ -668,12 +610,79 @@ begin
   if FItemIndex >= 0 then
     AdjustViewOffset(LViewH);
 
-  // Data rows
-  for var LI := FViewOffset to FViewOffset + LViewH - 1 do
+  RenderBodyRows(ACanvas, LInner, LWidths, LBodyTop, LViewH);
+end;
+
+procedure TTuiTable.RenderHeader(const ACanvas: TTuiCanvas; const AInner: TRect;
+  const AWidths: TArray<Integer>);
+begin
+  var LColX := AInner.Left;
+  for var LI := 0 to FColCount - 1 do
+  begin
+    if LColX >= AInner.Right then
+      Break;
+    var LStyle: TTuiStyle;
+    if LI = FSortFocus then
+      LStyle := FHeaderFocusStyle
+    else
+      LStyle := FHeaderNormalStyle;
+    // Compute caption with sort indicator
+    var LCaption := FColumns[LI].Caption;
+    if (LI = FSortColumn) and (FSortDir <> sdNone) then
+    begin
+      if FSortDir = sdAsc then
+        LCaption := LCaption + ' ' + CGlyphSortAsc
+      else
+        LCaption := LCaption + ' ' + CGlyphSortDesc;
+    end;
+    var LOffset: Integer;
+    LCaption := CellText(LCaption, AWidths[LI], taLeft, LOffset);
+    ACanvas.FillRect(
+      TRect.Create(LColX, AInner.Top, Min(LColX + AWidths[LI], AInner.Right), AInner.Top + 1),
+      ' ', LStyle);
+    ACanvas.WriteAt(LColX, AInner.Top, LCaption, LStyle);
+    Inc(LColX, AWidths[LI]);
+    // Vertical separator
+    if LI < FColCount - 1 then
+    begin
+      if LColX < AInner.Right then
+        ACanvas.WriteAt(LColX, AInner.Top, CGlyphVSeparator, FSepStyle);
+      Inc(LColX);
+    end;
+  end;
+end;
+
+procedure TTuiTable.RenderSeparatorRow(const ACanvas: TTuiCanvas;
+  const AInner: TRect; const AWidths: TArray<Integer>);
+begin
+  var LSepY := AInner.Top + 1;
+  var LColX := AInner.Left;
+  for var LI := 0 to FColCount - 1 do
+  begin
+    if LColX >= AInner.Right then
+      Break;
+    // One FillRect per column instead of one WriteAt per cell
+    ACanvas.FillRect(
+      TRect.Create(LColX, LSepY, Min(LColX + AWidths[LI], AInner.Right), LSepY + 1),
+      CGlyphHSeparator, FSepStyle);
+    Inc(LColX, AWidths[LI]);
+    if LI < FColCount - 1 then
+    begin
+      if LColX < AInner.Right then
+        ACanvas.WriteAt(LColX, LSepY, CGlyphJunction, FSepStyle);
+      Inc(LColX);
+    end;
+  end;
+end;
+
+procedure TTuiTable.RenderBodyRows(const ACanvas: TTuiCanvas; const AInner: TRect;
+  const AWidths: TArray<Integer>; ABodyTop, AViewH: Integer);
+begin
+  for var LI := FViewOffset to FViewOffset + AViewH - 1 do
   begin
     if LI >= FRows.Count then
       Break;
-    var LRowY := LBodyTop + (LI - FViewOffset);
+    var LRowY := ABodyTop + (LI - FViewOffset);
     var LRow := FRows[LI];
     // Row style
     var LRowStyle: TTuiStyle;
@@ -687,26 +696,28 @@ begin
     else
       LRowStyle := FRowNormalStyle;
     ACanvas.FillRect(
-      TRect.Create(LInner.Left, LRowY, LInner.Right, LRowY + 1),
+      TRect.Create(AInner.Left, LRowY, AInner.Right, LRowY + 1),
       ' ', LRowStyle);
-    // Cells
-    var LColX := LInner.Left;
+    // Cells: the row is already filled with LRowStyle, so only the
+    // truncated text is written, at the alignment offset.
+    var LColX := AInner.Left;
     for var LJ := 0 to FColCount - 1 do
     begin
-      if LColX >= LInner.Right then
+      if LColX >= AInner.Right then
         Break;
       var LCellVal: string;
       if LJ < Length(LRow) then
         LCellVal := LRow[LJ]
       else
         LCellVal := '';
-      ACanvas.WriteAt(LColX, LRowY,
-        CellText(LCellVal, LWidths[LJ], FColumns[LJ].Alignment), LRowStyle);
-      Inc(LColX, LWidths[LJ]);
+      var LOffset: Integer;
+      var LText := CellText(LCellVal, AWidths[LJ], FColumns[LJ].Alignment, LOffset);
+      ACanvas.WriteAt(LColX + LOffset, LRowY, LText, LRowStyle);
+      Inc(LColX, AWidths[LJ]);
       if LJ < FColCount - 1 then
       begin
-        if LColX < LInner.Right then
-          ACanvas.WriteAt(LColX, LRowY, #$2502, FSepStyle);
+        if LColX < AInner.Right then
+          ACanvas.WriteAt(LColX, LRowY, CGlyphVSeparator, FSepStyle);
         Inc(LColX);
       end;
     end;
