@@ -270,11 +270,11 @@ begin
   for var LX := 0 to LVisible - 1 do
   begin
     var LV := GetPoint(LOffset + LX);
-    var LBlockIdx := Round((LV - LMin) / LRange * 7);
+    var LBlockIdx := Round((LV - LMin) / LRange * High(CBlocksVert));
     if LBlockIdx < 0 then
       LBlockIdx := 0;
-    if LBlockIdx > 7 then
-      LBlockIdx := 7;
+    if LBlockIdx > High(CBlocksVert) then
+      LBlockIdx := High(CBlocksVert);
     ACanvas.WriteAt(ARect.Left + (LWidth - LVisible) + LX, ARect.Top,
       CBlocksVert[LBlockIdx], LStyle);
   end;

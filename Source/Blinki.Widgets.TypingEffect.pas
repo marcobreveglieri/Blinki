@@ -106,6 +106,12 @@ implementation
 uses
   System.Math;
 
+const
+  CMSecsPerSecond = 1000;
+
+  // Cursor blink half-period while the animation is running.
+  CCursorBlinkMs = 500;
+
 { TTuiTypingEffect }
 
 constructor TTuiTypingEffect.Create(AParent: TTuiWidget);
@@ -143,7 +149,7 @@ begin
   if FActive then
   begin
     Inc(FAccumMs, AElapsedMs);
-    var LStep := 1000 div Max(1, FCharsPerSecond);
+    var LStep := CMSecsPerSecond div Max(1, FCharsPerSecond);
     while FAccumMs >= LStep do
     begin
       Dec(FAccumMs, LStep);
@@ -165,9 +171,9 @@ begin
   if FActive then
   begin
     Inc(FBlinkAccum, AElapsedMs);
-    if FBlinkAccum >= 500 then
+    if FBlinkAccum >= CCursorBlinkMs then
     begin
-      Dec(FBlinkAccum, 500);
+      Dec(FBlinkAccum, CCursorBlinkMs);
       FBlinkOn := not FBlinkOn;
       Invalidate;
     end;

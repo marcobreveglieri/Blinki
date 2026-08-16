@@ -108,6 +108,10 @@ uses
   Blinki.Core.Unicode,
   Blinki.FX.Gradient;
 
+const
+  // Phase offset in radians between adjacent columns; shapes the wave.
+  CWavePhasePerColumn = 0.3;
+
 { TTuiWaveAnimation }
 
 constructor TTuiWaveAnimation.Create(AParent: TTuiWidget);
@@ -165,8 +169,7 @@ begin
     var LWidth := TTuiUnicode.ClusterWidthAt(LText, LIndex, LLen);
     if LWidth < 1 then
       LWidth := 1;
-    // Phase offset of 0.3 rad per column to create the wave
-    var LT := (Sin(FPhase + LCol * 0.3) + 1.0) / 2.0;
+    var LT := (Sin(FPhase + LCol * CWavePhasePerColumn) + 1.0) / 2.0;
     var LFg := LerpColor(FBaseColor, FPeakColor, LT);
     ACanvas.WriteAt(ARect.Left + LCol, ARect.Top, Copy(LText, LIndex, LLen),
       TTuiStyle.Create(LFg, FBgColor, FAttrs));

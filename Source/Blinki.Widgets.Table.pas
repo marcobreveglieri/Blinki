@@ -419,6 +419,9 @@ begin
 end;
 
 procedure TTuiTable.ComputeWidths(AContentW: Integer; out AWidths: TArray<Integer>);
+const
+  // Cap for auto-sized columns so a single long cell cannot starve the rest.
+  CMaxAutoColWidth = 32;
 begin
   // DoRender calls this every frame; the result only depends on FColumns,
   // FRows content and AContentW (see the field comment), so a cache keyed on
@@ -459,7 +462,7 @@ begin
       for var LJ := 0 to FRows.Count - 1 do
         if LIndex < Length(FRows[LJ]) then
           LMaxW := Max(LMaxW, TTuiAnsi.VisibleLength(FRows[LJ][LIndex]));
-      LMaxW := Min(Max(LMaxW, 1), 32);
+      LMaxW := Min(Max(LMaxW, 1), CMaxAutoColWidth);
       AWidths[LIndex] := LMaxW;
       Inc(LAutoSumW, LMaxW);
       Inc(LAutoCount);

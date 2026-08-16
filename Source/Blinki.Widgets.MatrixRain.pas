@@ -85,6 +85,13 @@ uses
   Blinki.FX.Gradient;
 
 const
+  // Rain advances once per step (~20 fps), consistent with the base tick.
+  CRainStepMs = 50;
+
+  // Fraction of a column's Speed applied on each step.
+  CRainAdvancePerStep = 0.05;
+
+const
   CMatrixChars =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' +
     '!@#$%^&*()_+-=[]{}|;:,.<>?/~`';
@@ -134,17 +141,17 @@ end;
 procedure TTuiMatrixRain.DoTick(AElapsedMs: Integer);
 begin
   Inc(FAccumMs, AElapsedMs);
-  // Updates position every 50 ms (~20 fps), consistent with the base tick
-  if FAccumMs < 50 then
+  // Advances at ~20 fps, consistent with the base tick
+  if FAccumMs < CRainStepMs then
     Exit;
-  Dec(FAccumMs, 50);
+  Dec(FAccumMs, CRainStepMs);
 
   if FLastHeight <= 0 then
     Exit;
 
   for var LIndex := 0 to High(FColumns) do
   begin
-    FColumns[LIndex].Y := FColumns[LIndex].Y + FColumns[LIndex].Speed * 0.05;
+    FColumns[LIndex].Y := FColumns[LIndex].Y + FColumns[LIndex].Speed * CRainAdvancePerStep;
     // Rotates a random character in the trail for the "glyph change" effect
     if Length(FColumns[LIndex].Chars) > 0 then
       FColumns[LIndex].Chars[Random(Length(FColumns[LIndex].Chars))] := RandomMatrixChar;

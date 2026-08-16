@@ -113,6 +113,14 @@ uses
   System.Math;
 
 const
+  CDefaultAnimDurMs = 300;
+  CDefaultThresholdWarn = 0.5;
+  CDefaultThresholdError = 0.8;
+
+  // Minimum displayed-value delta (0.5%) that triggers a repaint.
+  CRepaintEpsilon = 0.005;
+
+const
 
   // Horizontal partial blocks U+258F (1/8) .. U+2588 (8/8)
   CBlocks: array[0..7] of string = (
@@ -126,10 +134,10 @@ begin
   inherited Create(AParent);
   FLastDisplayed := -1;
   FAnimated := True;
-  FAnimDurMs := 300;
+  FAnimDurMs := CDefaultAnimDurMs;
   FShowPercent := True;
-  FThresholdWarn := 0.5;
-  FThresholdError := 0.8;
+  FThresholdWarn := CDefaultThresholdWarn;
+  FThresholdError := CDefaultThresholdError;
 end;
 
 function TTuiGauge.ColorForValue(AValue: Double): TTuiColor;
@@ -211,9 +219,9 @@ begin
   Dec(FAnimRemainMs, LElapsed);
   if FAnimRemainMs <= 0 then
     FDisplayValue := FTargetValue;
-  // Invalidates only if the displayed value has changed by at least 0.5%
+  // Invalidates only if the displayed value has changed noticeably
   // (avoids unnecessary repaints)
-  if Abs(FDisplayValue - FLastDisplayed) >= 0.005 then
+  if Abs(FDisplayValue - FLastDisplayed) >= CRepaintEpsilon then
   begin
     FLastDisplayed := FDisplayValue;
     Invalidate;
