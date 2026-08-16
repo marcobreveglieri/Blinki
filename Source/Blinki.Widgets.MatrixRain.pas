@@ -59,6 +59,9 @@ type
         Speed: Single;
         TrailLen: Integer;
         Chars: TArray<Char>;
+        // One style per trail position, precomputed by InitColumn so the
+        // render loop does not run LerpColor per cell per frame.
+        TrailStyles: TArray<TTuiStyle>;
       end;
     var
       FColumns: TArray<TMatrixColumn>;
@@ -91,6 +94,12 @@ const
   // Fraction of a column's Speed applied on each step.
   CRainAdvancePerStep = 0.05;
 
+  // Hardcoded palette of the matrix effect (the theme is not used here).
+  CRainBg: TTuiColor = (Kind: ckRGB; R: 0; G: 0; B: 0);
+  CRainGreen: TTuiColor = (Kind: ckRGB; R: 0; G: 220; B: 0);
+  CRainDark: TTuiColor = (Kind: ckRGB; R: 0; G: 30; B: 0);
+  CRainHead: TTuiColor = (Kind: ckRGB; R: 220; G: 255; B: 220);
+
 const
   CMatrixChars =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' +
@@ -120,6 +129,15 @@ begin
   SetLength(ACol.Chars, ACol.TrailLen + 1);
   for var LIndex := 0 to Length(ACol.Chars) - 1 do
     ACol.Chars[LIndex] := RandomMatrixChar;
+  // Trail gradient: fixed until the column reinitialises, so resolve the
+  // per-position styles here instead of on every frame.
+  SetLength(ACol.TrailStyles, ACol.TrailLen + 1);
+  for var LIndex := 1 to ACol.TrailLen do
+  begin
+    var LT := 1.0 - LIndex / Max(1, ACol.TrailLen);
+    ACol.TrailStyles[LIndex] :=
+      TTuiStyle.Create(LerpColor(CRainDark, CRainGreen, LT), CRainBg);
+  end;
 end;
 
 procedure TTuiMatrixRain.InitColumns(AWidth, AHeight: Integer);
@@ -172,12 +190,8 @@ begin
   if (ARect.Width <> FLastWidth) or (ARect.Height <> FLastHeight) then
     InitColumns(ARect.Width, ARect.Height);
 
-  var LBg := TTuiColor.RGB(0, 0, 0);
-  var LGreen := TTuiColor.RGB(0, 220, 0);
-  var LDark := TTuiColor.RGB(0, 30, 0);
-  var LWhite := TTuiColor.RGB(220, 255, 220);
-
-  ACanvas.FillRect(ARect, ' ', TTuiStyle.Create(LBg, LBg));
+  ACanvas.FillRect(ARect, ' ', TTuiStyle.Create(CRainBg, CRainBg));
+  var LHeadStyle := TTuiStyle.Create(CRainHead, CRainBg, [taBold]);
 
   for var LCol := 0 to Min(ARect.Width - 1, High(FColumns)) do
   begin
@@ -191,28 +205,26 @@ begin
         LCh := FColumns[LCol].Chars[0]
       else
         LCh := RandomMatrixChar;
-      ACanvas.WriteAt(ARect.Left + LCol, ARect.Top + LHead, LCh,
-        TTuiStyle.Create(LWhite, LBg, [taBold]));
+      ACanvas.WriteAt(ARect.Left + LCol, ARect.Top + LHead, LCh, LHeadStyle);
     end;
 
-    // Trail
-    for var LTrailI := 1 to FColumns[LCol].TrailLen do
+    // Trail: characters and gradient styles are precomputed per column
+    var LTrailLen := FColumns[LCol].TrailLen;
+    var LCharsLen := Length(FColumns[LCol].Chars);
+    for var LTrailI := 1 to LTrailLen do
     begin
       var LRow := LHead - LTrailI;
       if (LRow < 0) or (LRow >= ARect.Height) then
         Continue;
 
-      var LT := 1.0 - LTrailI / Max(1, FColumns[LCol].TrailLen);
-      var LFg := LerpColor(LDark, LGreen, LT);
-
       var LCh: Char;
-      if LTrailI < Length(FColumns[LCol].Chars) then
+      if LTrailI < LCharsLen then
         LCh := FColumns[LCol].Chars[LTrailI]
       else
         LCh := RandomMatrixChar;
 
       ACanvas.WriteAt(ARect.Left + LCol, ARect.Top + LRow, LCh,
-        TTuiStyle.Create(LFg, LBg));
+        FColumns[LCol].TrailStyles[LTrailI]);
     end;
   end;
 end;
