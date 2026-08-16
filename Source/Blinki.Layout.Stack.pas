@@ -38,6 +38,7 @@ interface
 uses
   System.Types,
   Blinki.Core.Canvas,
+  Blinki.Core.Geometry,
   Blinki.Core.Widget;
 
 type
@@ -59,7 +60,11 @@ type
   /// </summary>
   TTuiStack = class abstract(TTuiWidget)
   strict private
+    // Reused across frames so DoRender does not allocate two arrays per
+    // render; resized only when the child count changes.
+    FConstraintsBuf: TArray<TTuiLayoutConstraint>;
     FOrientation: TTuiStackOrientation;
+    FSizesBuf: TArray<Integer>;
   protected
     /// <summary>
     ///   Resolves children constraints and delegates Render to each one
@@ -100,7 +105,6 @@ type
 implementation
 
 uses
-  Blinki.Core.Geometry,
   Blinki.Layout.Solver;
 
 { TTuiStack }
@@ -117,11 +121,11 @@ begin
   if ChildCount = 0 then
     Exit;
 
-  // Collects constraints from children
-  var LConstraints: TArray<TTuiLayoutConstraint>;
-  SetLength(LConstraints, ChildCount);
+  // Collects constraints from children into the reused buffer
+  if Length(FConstraintsBuf) <> ChildCount then
+    SetLength(FConstraintsBuf, ChildCount);
   for var LIndex := 0 to ChildCount - 1 do
-    LConstraints[LIndex] := Children[LIndex].LayoutConstraint;
+    FConstraintsBuf[LIndex] := Children[LIndex].LayoutConstraint;
 
   // Resolves constraints along the main axis
   var LTotal: Integer;
@@ -130,7 +134,8 @@ begin
   else
     LTotal := ARect.Height;
 
-  var LSizes := TTuiLayoutSolver.Solve(LTotal, LConstraints);
+  TTuiLayoutSolver.Solve(LTotal, FConstraintsBuf, FSizesBuf);
+  var LSizes := FSizesBuf;
 
   // Delegates rendering to each child with the computed TRect
   var LOffset := 0;

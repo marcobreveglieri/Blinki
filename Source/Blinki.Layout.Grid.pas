@@ -80,6 +80,12 @@ type
     FRowConstraints: TArray<TTuiLayoutConstraint>;
     FColConstraints: TArray<TTuiLayoutConstraint>;
     FPlacements: TDictionary<TTuiWidget, TTuiGridPlacement>;
+    // Reused across frames so DoRender does not allocate four arrays per
+    // render; resized only when the grid dimensions change.
+    FColLeftsBuf: TArray<Integer>;
+    FColSizesBuf: TArray<Integer>;
+    FRowSizesBuf: TArray<Integer>;
+    FRowTopsBuf: TArray<Integer>;
     function ComputeAutoPlacement(AChildIndex: Integer): TTuiGridPlacement;
   protected
     procedure DoRender(const ACanvas: TTuiCanvas; const ARect: TRect); override;
@@ -197,15 +203,19 @@ begin
   if (FRows = 0) or (FCols = 0) then
     Exit;
 
-  // Resolves row and column sizes
-  var LRowSizes := TTuiLayoutSolver.Solve(ARect.Height, FRowConstraints);
-  var LColSizes := TTuiLayoutSolver.Solve(ARect.Width,  FColConstraints);
+  // Resolves row and column sizes into the reused buffers
+  TTuiLayoutSolver.Solve(ARect.Height, FRowConstraints, FRowSizesBuf);
+  TTuiLayoutSolver.Solve(ARect.Width,  FColConstraints, FColSizesBuf);
+  var LRowSizes := FRowSizesBuf;
+  var LColSizes := FColSizesBuf;
 
   // Precomputes cumulative origins (top for rows, left for columns)
-  var LRowTops: TArray<Integer>;
-  var LColLefts: TArray<Integer>;
-  SetLength(LRowTops,  FRows);
-  SetLength(LColLefts, FCols);
+  if Length(FRowTopsBuf) <> FRows then
+    SetLength(FRowTopsBuf, FRows);
+  if Length(FColLeftsBuf) <> FCols then
+    SetLength(FColLeftsBuf, FCols);
+  var LRowTops := FRowTopsBuf;
+  var LColLefts := FColLeftsBuf;
 
   var LAccum := ARect.Top;
   for var LIndex := 0 to FRows - 1 do
