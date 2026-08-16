@@ -86,6 +86,8 @@ type
     FMaxValue: Double;
     FColorOverride: Boolean;
     FDefaultColor: TTuiColor;
+    procedure AppendBar(const ACaption: string; AValue: Double;
+      const AColor: TTuiColor; AHasColor: Boolean);
     procedure SetTitle(const AValue: string);
     procedure SetShowYAxis(AValue: Boolean);
     procedure SetShowLabels(AValue: Boolean);
@@ -194,15 +196,16 @@ begin
     Result := 1;
 end;
 
-procedure TTuiBarChart.AddBar(const ACaption: string; AValue: Double);
+procedure TTuiBarChart.AppendBar(const ACaption: string; AValue: Double;
+  const AColor: TTuiColor; AHasColor: Boolean);
 begin
   if AValue < 0 then
     AValue := 0;
   var LBar: TTuiBarChartBar;
   LBar.Caption := ACaption;
   LBar.Value := AValue;
-  LBar.HasColor := False;
-  LBar.Color := FDefaultColor;
+  LBar.HasColor := AHasColor;
+  LBar.Color := AColor;
   if FBarCount >= Length(FBars) then
     SetLength(FBars, Max(8, FBarCount * 2));
   FBars[FBarCount] := LBar;
@@ -210,21 +213,15 @@ begin
   Invalidate;
 end;
 
+procedure TTuiBarChart.AddBar(const ACaption: string; AValue: Double);
+begin
+  AppendBar(ACaption, AValue, FDefaultColor, False);
+end;
+
 procedure TTuiBarChart.AddBar(const ACaption: string; AValue: Double;
   const AColor: TTuiColor);
 begin
-  if AValue < 0 then
-    AValue := 0;
-  var LBar: TTuiBarChartBar;
-  LBar.Caption := ACaption;
-  LBar.Value := AValue;
-  LBar.HasColor := True;
-  LBar.Color := AColor;
-  if FBarCount >= Length(FBars) then
-    SetLength(FBars, Max(8, FBarCount * 2));
-  FBars[FBarCount] := LBar;
-  Inc(FBarCount);
-  Invalidate;
+  AppendBar(ACaption, AValue, AColor, True);
 end;
 
 procedure TTuiBarChart.Clear;
