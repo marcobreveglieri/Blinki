@@ -98,6 +98,8 @@ type
   strict private
     class var FEmojiLevel: TTuiEmojiLevel;
     class var FEmojiLevelExplicit: Boolean;
+    class function ScanBoundaryBefore(const AText: string; AIndex: Integer;
+      AInclusive: Boolean): Integer; static;
     class procedure SetEmojiLevel(AValue: TTuiEmojiLevel); static;
   public
     {$REGION 'Code point iteration'}
@@ -696,43 +698,39 @@ begin
     Result := AIndex + LLen;
 end;
 
-class function TTuiUnicode.PrevGraphemeBoundary(const AText: string;
-  AIndex: Integer): Integer;
+class function TTuiUnicode.ScanBoundaryBefore(const AText: string;
+  AIndex: Integer; AInclusive: Boolean): Integer;
 begin
+  // Shared scan for PrevGraphemeBoundary (strictly before AIndex) and
+  // SnapToClusterStart (AIndex itself when it lies on a boundary).
+  // Grapheme boundaries depend on left context, so scan forward from the
+  // start. Strings handled by widgets are short; O(n) is acceptable.
   Result := 1;
   if AIndex <= 1 then
     Exit;
   if AIndex > Length(AText) + 1 then
     AIndex := Length(AText) + 1;
-  // Grapheme boundaries depend on left context, so scan forward from the
-  // start. Strings handled by widgets are short; O(n) is acceptable.
   var LCurrent := 1;
   while LCurrent < AIndex do
   begin
     var LNext := NextGraphemeBoundary(AText, LCurrent);
-    if LNext >= AIndex then
+    if (LNext > AIndex) or ((LNext = AIndex) and not AInclusive) then
       Exit(LCurrent);
     LCurrent := LNext;
   end;
   Result := LCurrent;
 end;
 
+class function TTuiUnicode.PrevGraphemeBoundary(const AText: string;
+  AIndex: Integer): Integer;
+begin
+  Result := ScanBoundaryBefore(AText, AIndex, False);
+end;
+
 class function TTuiUnicode.SnapToClusterStart(const AText: string;
   AIndex: Integer): Integer;
 begin
-  if AIndex <= 1 then
-    Exit(1);
-  if AIndex > Length(AText) then
-    Exit(Length(AText) + 1);
-  var LBoundary := 1;
-  while LBoundary < AIndex do
-  begin
-    var LNext := NextGraphemeBoundary(AText, LBoundary);
-    if LNext > AIndex then
-      Break;
-    LBoundary := LNext;
-  end;
-  Result := LBoundary;
+  Result := ScanBoundaryBefore(AText, AIndex, True);
 end;
 
 class function TTuiUnicode.CodePointWidth(ACodePoint: TTuiCodePoint): Integer;
