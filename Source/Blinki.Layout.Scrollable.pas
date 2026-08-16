@@ -150,6 +150,37 @@ uses
   Blinki.Core.Input,
   Blinki.Core.Style;
 
+const
+  CGlyphArrowUp = #$25B2;    // ▲
+  CGlyphArrowDown = #$25BC;  // ▼
+  CGlyphArrowLeft = #$25C4;  // ◄
+  CGlyphArrowRight = #$25BA; // ►
+  CGlyphThumb = #$2588;      // █
+  CGlyphTrack = #$2591;      // ░
+
+// Shared thumb geometry for both scrollbar orientations: size and position
+// are proportional to the visible fraction and the scroll ratio.
+procedure ComputeThumb(ATrackStart, ATrackLen, AViewLen, AContentLen,
+  AOffset: Integer; out AThumbStart, AThumbEnd: Integer);
+begin
+  var LTrackEnd := ATrackStart + ATrackLen - 1;
+  if AContentLen <= AViewLen then
+  begin
+    // Content smaller than the viewport: thumb fills the entire track
+    AThumbStart := ATrackStart;
+    AThumbEnd := LTrackEnd;
+    Exit;
+  end;
+  var LContent := Max(1, AContentLen);
+  var LMaxOffset := Max(1, LContent - AViewLen);
+  var LThumbLen := Max(1, Round(ATrackLen * AViewLen / LContent));
+  AThumbStart := ATrackStart +
+    Round((ATrackLen - LThumbLen) * (AOffset / LMaxOffset));
+  AThumbEnd := AThumbStart + LThumbLen - 1;
+  if AThumbEnd > LTrackEnd then
+    AThumbEnd := LTrackEnd;
+end;
+
 { TTuiScrollable }
 
 constructor TTuiScrollable.Create(AContent: TTuiWidget;
@@ -231,8 +262,8 @@ begin
   var LStyleTrack := TTuiStyle.Create(TTuiColors.BrightBlack, TTuiColor.Default, []);
 
   // Arrows
-  ACanvas.WriteAt(LX, ARect.Top, #$25B2, LStyleActive);  // ▲
-  ACanvas.WriteAt(LX, ARect.Top + AViewHeight - 1, #$25BC, LStyleActive);  // ▼
+  ACanvas.WriteAt(LX, ARect.Top, CGlyphArrowUp, LStyleActive);
+  ACanvas.WriteAt(LX, ARect.Top + AViewHeight - 1, CGlyphArrowDown, LStyleActive);
 
   // Track
   var LTrackTop := ARect.Top + 1;
@@ -241,32 +272,19 @@ begin
   if LTrackLen < 1 then
     Exit;
 
-  // Thumb: size and position are proportional
-  var LThumbTop: Integer;
-  var LThumbBot: Integer;
-  var LContentH  := Max(1, FContentSize.cy);
-  var LMaxOffset := Max(1, LContentH - AViewHeight);
-  if FContentSize.cy <= AViewHeight then
-  begin
-    // Content smaller than the viewport: thumb fills the entire track
-    LThumbTop := LTrackTop;
-    LThumbBot := LTrackBot;
-  end
-  else
-  begin
-    var LThumbLen := Max(1, Round(LTrackLen * AViewHeight / LContentH));
-    var LScrollRatio := FOffsetY / LMaxOffset;
-    LThumbTop := LTrackTop + Round((LTrackLen - LThumbLen) * LScrollRatio);
-    LThumbBot := LThumbTop + LThumbLen - 1;
-    if LThumbBot > LTrackBot then
-      LThumbBot := LTrackBot;
-  end;
+  var LThumbTop, LThumbBot: Integer;
+  ComputeThumb(LTrackTop, LTrackLen, AViewHeight, FContentSize.cy, FOffsetY,
+    LThumbTop, LThumbBot);
 
-  for var LIndex := LTrackTop to LTrackBot do
-    if (LIndex >= LThumbTop) and (LIndex <= LThumbBot) then
-      ACanvas.WriteAt(LX, LIndex, #$2588, LStyleActive)  // █ thumb
-    else
-      ACanvas.WriteAt(LX, LIndex, #$2591, LStyleTrack);  // ░ track
+  // Track above the thumb, the thumb, track below: three fills at most
+  if LThumbTop > LTrackTop then
+    ACanvas.FillRect(TRect.Create(LX, LTrackTop, LX + 1, LThumbTop),
+      CGlyphTrack, LStyleTrack);
+  ACanvas.FillRect(TRect.Create(LX, LThumbTop, LX + 1, LThumbBot + 1),
+    CGlyphThumb, LStyleActive);
+  if LThumbBot < LTrackBot then
+    ACanvas.FillRect(TRect.Create(LX, LThumbBot + 1, LX + 1, LTrackBot + 1),
+      CGlyphTrack, LStyleTrack);
 end;
 
 procedure TTuiScrollable.DrawHorizontalScrollbar(const ACanvas: TTuiCanvas;
@@ -284,8 +302,8 @@ begin
   var LStyleTrack := TTuiStyle.Create(TTuiColors.BrightBlack, TTuiColor.Default, []);
 
   // Arrows
-  ACanvas.WriteAt(ARect.Left,                  LY, #$25C4, LStyleActive);  // ◄
-  ACanvas.WriteAt(ARect.Left + AViewWidth - 1, LY, #$25BA, LStyleActive);  // ►
+  ACanvas.WriteAt(ARect.Left,                  LY, CGlyphArrowLeft, LStyleActive);
+  ACanvas.WriteAt(ARect.Left + AViewWidth - 1, LY, CGlyphArrowRight, LStyleActive);
 
   // Track
   var LTrackLeft  := ARect.Left + 1;
@@ -294,32 +312,19 @@ begin
   if LTrackLen < 1 then
     Exit;
 
-  var LThumbLeft: Integer;
-  var LThumbRight: Integer;
-  var LContentW := Max(1, FContentSize.cx);
-  var LMaxOffset := Max(1, LContentW - AViewWidth);
-  if FContentSize.cx <= AViewWidth then
-  begin
-    LThumbLeft := LTrackLeft;
-    LThumbRight := LTrackRight;
-  end
-  else
-  begin
-    var LThumbLen := Max(1, Round(LTrackLen * AViewWidth / LContentW));
-    var LScrollRatio := FOffsetX / LMaxOffset;
-    LThumbLeft := LTrackLeft + Round((LTrackLen - LThumbLen) * LScrollRatio);
-    LThumbRight := LThumbLeft + LThumbLen - 1;
-    if LThumbRight > LTrackRight then
-      LThumbRight := LTrackRight;
-  end;
+  var LThumbLeft, LThumbRight: Integer;
+  ComputeThumb(LTrackLeft, LTrackLen, AViewWidth, FContentSize.cx, FOffsetX,
+    LThumbLeft, LThumbRight);
 
-  for var LIndex := LTrackLeft to LTrackRight do
-  begin
-    if (LIndex >= LThumbLeft) and (LIndex <= LThumbRight) then
-      ACanvas.WriteAt(LIndex, LY, #$2588, LStyleActive)  // █ thumb
-    else
-      ACanvas.WriteAt(LIndex, LY, #$2591, LStyleTrack);  // ░ track
-  end;
+  // Track before the thumb, the thumb, track after: three fills at most
+  if LThumbLeft > LTrackLeft then
+    ACanvas.FillRect(TRect.Create(LTrackLeft, LY, LThumbLeft, LY + 1),
+      CGlyphTrack, LStyleTrack);
+  ACanvas.FillRect(TRect.Create(LThumbLeft, LY, LThumbRight + 1, LY + 1),
+    CGlyphThumb, LStyleActive);
+  if LThumbRight < LTrackRight then
+    ACanvas.FillRect(TRect.Create(LThumbRight + 1, LY, LTrackRight + 1, LY + 1),
+      CGlyphTrack, LStyleTrack);
 end;
 
 procedure TTuiScrollable.DoRender(const ACanvas: TTuiCanvas;
