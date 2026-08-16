@@ -327,7 +327,6 @@ type
 implementation
 
 uses
-  System.Classes,
   Blinki.Core.Unicode;
 
 const
@@ -638,51 +637,57 @@ begin
 end;
 
 class function TTuiAnsi.WrapText(const AText: string; AWidth: Integer): TArray<string>;
+
+  // Appends ALine to ALines with geometric growth; the final SetLength in
+  // the main body trims the slack. Avoids a TStringList (heap object plus
+  // a full copy in ToStringArray) per call.
+  procedure AppendLine(var ALines: TArray<string>; var ACount: Integer;
+    const ALine: string);
+  begin
+    if ACount = Length(ALines) then
+      SetLength(ALines, ACount * 2 + 4);
+    ALines[ACount] := ALine;
+    Inc(ACount);
+  end;
+
 begin
   if AWidth < 1 then
-  begin
-    SetLength(Result, 1);
-    Result[0] := AText;
-    Exit;
-  end;
+    Exit([AText]);
   var LWords := AText.Split([' ']);
-  var LResult := TStringList.Create;
-  try
-    var LLine := '';
-    var LLineWidth := 0;
-    for var LWord in LWords do
+  Result := nil;
+  var LCount := 0;
+  var LLine := '';
+  var LLineWidth := 0;
+  for var LWord in LWords do
+  begin
+    if LWord = '' then
+      Continue;
+    // Measure columns, not UTF-16 units: wide CJK/emoji words would
+    // otherwise overflow the target width. The line width is accumulated
+    // so each word is measured exactly once.
+    var LWordWidth := VisibleLength(LWord);
+    if LLine = '' then
     begin
-      if LWord = '' then
-        Continue;
-      // Measure columns, not UTF-16 units: wide CJK/emoji words would
-      // otherwise overflow the target width. The line width is accumulated
-      // so each word is measured exactly once.
-      var LWordWidth := VisibleLength(LWord);
-      if LLine = '' then
-      begin
-        LLine := LWord;
-        LLineWidth := LWordWidth;
-      end
-      else if LLineWidth + 1 + LWordWidth <= AWidth then
-      begin
-        LLine := LLine + ' ' + LWord;
-        Inc(LLineWidth, 1 + LWordWidth);
-      end
-      else
-      begin
-        LResult.Add(LLine);
-        LLine := LWord;
-        LLineWidth := LWordWidth;
-      end;
+      LLine := LWord;
+      LLineWidth := LWordWidth;
+    end
+    else if LLineWidth + 1 + LWordWidth <= AWidth then
+    begin
+      LLine := LLine + ' ' + LWord;
+      Inc(LLineWidth, 1 + LWordWidth);
+    end
+    else
+    begin
+      AppendLine(Result, LCount, LLine);
+      LLine := LWord;
+      LLineWidth := LWordWidth;
     end;
-    if LLine <> '' then
-      LResult.Add(LLine);
-    if LResult.Count = 0 then
-      LResult.Add('');
-    Result := LResult.ToStringArray;
-  finally
-    LResult.Free;
   end;
+  if LLine <> '' then
+    AppendLine(Result, LCount, LLine);
+  if LCount = 0 then
+    Exit(['']);
+  SetLength(Result, LCount);
 end;
 
 class function TTuiAnsi.BoxCharset(AStyle: TTuiBoxStyle): TTuiBoxCharSet;

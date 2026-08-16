@@ -66,6 +66,9 @@ type
   ///   Static access to the emoji shortcode catalog.
   /// </summary>
   TTuiEmoji = record
+  strict private
+    class function TryExpandShortcodeAt(const AText: string; AIndex: Integer;
+      out AGlyph: string; out ANext: Integer): Boolean; static;
   public
     /// <summary>
     ///   Number of entries in the catalog.
@@ -240,34 +243,50 @@ begin
   end;
 end;
 
+class function TTuiEmoji.TryExpandShortcodeAt(const AText: string;
+  AIndex: Integer; out AGlyph: string; out ANext: Integer): Boolean;
+begin
+  Result := False;
+  // Candidate shortcode at AIndex (which holds ':'): look for the closing
+  // colon; whitespace or end of text aborts the candidate.
+  var LClose := AIndex + 1;
+  while (LClose <= Length(AText)) and (AText[LClose] <> ':') and
+        (AText[LClose] > ' ') do
+    Inc(LClose);
+  if (LClose > Length(AText)) or (AText[LClose] <> ':') or
+     (LClose <= AIndex + 1) then
+    Exit;
+  AGlyph := Find(Copy(AText, AIndex + 1, LClose - AIndex - 1));
+  if AGlyph = '' then
+    Exit;
+  ANext := LClose + 1;
+  Result := True;
+end;
+
 class function TTuiEmoji.Expand(const AText: string): string;
 begin
-  Result := '';
-  var LIndex := 1;
-  while LIndex <= Length(AText) do
-  begin
-    var LChar := AText[LIndex];
-    if LChar = ':' then
+  var LBuilder := TStringBuilder.Create(Length(AText));
+  try
+    var LIndex := 1;
+    while LIndex <= Length(AText) do
     begin
-      // Candidate shortcode: look for the closing colon.
-      var LClose := LIndex + 1;
-      while (LClose <= Length(AText)) and (AText[LClose] <> ':') and
-            (AText[LClose] > ' ') do
-        Inc(LClose);
-      if (LClose <= Length(AText)) and (AText[LClose] = ':') and
-         (LClose > LIndex + 1) then
+      if AText[LIndex] = ':' then
       begin
-        var LGlyph := Find(Copy(AText, LIndex + 1, LClose - LIndex - 1));
-        if LGlyph <> '' then
+        var LGlyph: string;
+        var LNext: Integer;
+        if TryExpandShortcodeAt(AText, LIndex, LGlyph, LNext) then
         begin
-          Result := Result + LGlyph;
-          LIndex := LClose + 1;
+          LBuilder.Append(LGlyph);
+          LIndex := LNext;
           Continue;
         end;
       end;
+      LBuilder.Append(AText[LIndex]);
+      Inc(LIndex);
     end;
-    Result := Result + LChar;
-    Inc(LIndex);
+    Result := LBuilder.ToString;
+  finally
+    LBuilder.Free;
   end;
 end;
 
