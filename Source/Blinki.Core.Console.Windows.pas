@@ -38,7 +38,6 @@ interface
 {$IFDEF MSWINDOWS}
 
 uses
-  System.SysUtils,
   System.Types,
   Winapi.Windows,
   Blinki.Core.Console,

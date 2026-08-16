@@ -104,8 +104,7 @@ type
 implementation
 
 uses
-  System.Math,
-  Blinki.Core.Event;
+  System.Math;
 
 { TTuiTypingEffect }
 

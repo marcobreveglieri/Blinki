@@ -73,9 +73,6 @@ type
 
 implementation
 
-uses
-  Blinki.Core.Event;
-
 { TTuiLabel }
 
 procedure TTuiLabel.SetText(const AValue: string);

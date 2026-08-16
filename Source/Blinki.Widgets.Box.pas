@@ -34,7 +34,6 @@ unit Blinki.Widgets.Box;
 interface
 
 uses
-  System.SysUtils,
   System.Types,
   Blinki.Core.Ansi,
   Blinki.Core.Canvas,
@@ -90,10 +89,6 @@ type
   end;
 
 implementation
-
-uses
-  System.Generics.Collections,
-  Blinki.Core.Event;
 
 { TTuiBox }
 

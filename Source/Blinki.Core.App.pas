@@ -289,8 +289,7 @@ implementation
 uses
   System.Diagnostics,
   Blinki.Core.Ansi,
-  Blinki.Core.Event,
-  Blinki.Core.Render;
+  Blinki.Core.Event;
 
 { TTuiApp }
 

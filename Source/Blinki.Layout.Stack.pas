@@ -100,7 +100,6 @@ type
 implementation
 
 uses
-  System.Generics.Collections,
   Blinki.Core.Geometry,
   Blinki.Layout.Solver;
 

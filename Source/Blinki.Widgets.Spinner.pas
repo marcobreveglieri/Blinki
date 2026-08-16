@@ -33,7 +33,6 @@ unit Blinki.Widgets.Spinner;
 interface
 
 uses
-  System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Style,
@@ -130,9 +129,6 @@ type
   end;
 
 implementation
-
-uses
-  Blinki.Core.Event;
 
 const
 

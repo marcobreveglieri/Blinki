@@ -34,7 +34,6 @@ unit Blinki.Widgets.WaveAnimation;
 interface
 
 uses
-  System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Style,
@@ -105,9 +104,7 @@ type
 implementation
 
 uses
-  System.Math,
   Blinki.Core.Ansi,
-  Blinki.Core.Event,
   Blinki.Core.Unicode,
   Blinki.FX.Gradient;
 

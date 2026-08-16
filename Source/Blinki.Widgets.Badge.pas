@@ -33,7 +33,6 @@ unit Blinki.Widgets.Badge;
 interface
 
 uses
-  System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Style,

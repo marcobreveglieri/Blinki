@@ -33,7 +33,6 @@ unit Blinki.Widgets.RadioButton;
 interface
 
 uses
-  System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
@@ -114,7 +113,6 @@ type
 implementation
 
 uses
-  System.Generics.Collections,
   Blinki.Core.Input;
 
 const

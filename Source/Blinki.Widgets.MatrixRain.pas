@@ -82,7 +82,6 @@ type
 implementation
 
 uses
-  Blinki.Core.Event,
   Blinki.FX.Gradient;
 
 const

@@ -116,7 +116,6 @@ type
 implementation
 
 uses
-  System.Generics.Collections,
   Blinki.Core.Input;
 
 { TTuiTabs }

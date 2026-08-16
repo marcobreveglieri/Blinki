@@ -146,7 +146,6 @@ implementation
 
 uses
   System.Math,
-  Blinki.Core.Geometry,
   Blinki.Core.Input,
   Blinki.Core.Style;
 

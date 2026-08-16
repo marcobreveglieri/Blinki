@@ -33,7 +33,6 @@ unit Blinki.Widgets.Sidebar;
 interface
 
 uses
-  System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
@@ -110,7 +109,6 @@ type
 implementation
 
 uses
-  System.Generics.Collections,
   Blinki.Core.Ansi,
   Blinki.Core.Geometry,
   Blinki.Core.Input;

@@ -36,7 +36,6 @@ uses
   System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
-  Blinki.Core.Event,
   Blinki.Core.Style,
   Blinki.Core.Theme,
   Blinki.Core.Widget;

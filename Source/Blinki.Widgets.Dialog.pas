@@ -432,7 +432,6 @@ type
 implementation
 
 uses
-  System.Generics.Collections,
   System.Math,
   Blinki.Core.Ansi,
   Blinki.Core.Geometry,
