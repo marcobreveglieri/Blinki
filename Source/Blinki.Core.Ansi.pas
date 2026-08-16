@@ -255,14 +255,6 @@ type
     {$ENDREGION}
     {$REGION 'Utilities'}
     /// <summary>
-    ///   True for single UTF-16 code units that occupy 2 terminal columns
-    ///   (CJK, Hangul, Fullwidth). Cannot see surrogate pairs or grapheme
-    ///   clusters, so it misses every non-BMP emoji.
-    /// </summary>
-    class function IsWideChar(ACh: Char): Boolean; static;
-      deprecated 'Use TTuiUnicode.CodePointWidth / ClusterWidthAt';
-
-    /// <summary>
     ///   Computes the visible width in columns of a string, excluding ANSI
     ///   escape sequences (CSI ... [A-Za-z] and OSC ... BEL/ST). Measures
     ///   grapheme clusters: CJK and emoji (including ZWJ sequences, flags and
@@ -510,11 +502,6 @@ end;
 class function TTuiAnsi.MouseTrackingOff: string;
 begin
   Result := CSI + '?1000;1006l';
-end;
-
-class function TTuiAnsi.IsWideChar(ACh: Char): Boolean;
-begin
-  Result := TTuiUnicode.CodePointWidth(Ord(ACh)) = 2;
 end;
 
 class function TTuiAnsi.VisibleLength(const AText: string): Integer;

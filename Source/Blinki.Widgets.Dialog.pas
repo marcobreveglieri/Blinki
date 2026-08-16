@@ -446,32 +446,6 @@ const
   CDefaultDialogWidth  = 50;
   CDefaultDialogHeight = 9;
 
-// Returns the words-wrapped lines of AText fitting in AWidth columns.
-function WordWrapLines(const AText: string; AWidth: Integer): TArray<string>;
-begin
-  Result := [];
-  if AWidth <= 0 then
-    Exit;
-  var LWords := AText.Split([' '], TStringSplitOptions.None);
-  var LLine := '';
-  for var LWord in LWords do
-  begin
-    var LWordLen := TTuiAnsi.VisibleLength(LWord);
-    var LLineLen := TTuiAnsi.VisibleLength(LLine);
-    if LLine = '' then
-      LLine := LWord
-    else if LLineLen + 1 + LWordLen <= AWidth then
-      LLine := LLine + ' ' + LWord
-    else
-    begin
-      Result := Result + [LLine];
-      LLine := LWord;
-    end;
-  end;
-  if LLine <> '' then
-    Result := Result + [LLine];
-end;
-
 { TTuiDialogCaptions }
 
 class function TTuiDialogCaptions.Default: TTuiDialogCaptions;

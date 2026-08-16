@@ -276,8 +276,6 @@ begin
     begin
       // Render text + underlined shortcut
       var LShortIdx := Pos(UpCase(LItem.Shortcut), UpperCase(LText));
-      if LShortIdx = 0 then
-        LShortIdx := Pos(LowerCase(LItem.Shortcut), LText);
       if LShortIdx > 0 then
       begin
         ACanvas.WriteAt(ARect.Left, LRow, LText, LStyle);

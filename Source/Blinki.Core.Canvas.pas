@@ -397,10 +397,6 @@ end;
 
 procedure TTuiCanvas.DrawBox(const ARect: TRect; ABoxStyle: TTuiBoxStyle;
   const ATitle: string; const AStyle: TTuiStyle);
-//var
-//  LX, LY: Integer;
-//  LTopLine: string;
-//  LPadLeft: Integer;
 begin
   if (ARect.Width < 2) or (ARect.Height < 2) then
     Exit;
