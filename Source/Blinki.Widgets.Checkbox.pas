@@ -35,6 +35,7 @@ interface
 uses
   System.SysUtils,
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
   Blinki.Core.Style,
@@ -159,8 +160,8 @@ begin
   else
     LLine := CCheckboxUnchecked + ' ' + FCaption;
 
-  if Length(LLine) > ARect.Width then
-    LLine := Copy(LLine, 1, ARect.Width);
+  // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
+  LLine := TTuiAnsi.TruncateToWidth(LLine, ARect.Width);
 
   ACanvas.WriteAt(ARect.Left, ARect.Top, LLine, LStyle);
 end;

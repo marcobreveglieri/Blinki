@@ -36,6 +36,7 @@ uses
   System.Classes,
   System.SysUtils,
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
   Blinki.Core.Style,
@@ -209,9 +210,8 @@ begin
 
     ACanvas.FillRect(LRowRect, ' ', LStyle);
 
-    var LText := FItems[LIndex];
-    if Length(LText) > ARect.Width then
-      LText := Copy(LText, 1, ARect.Width);
+    // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
+    var LText := TTuiAnsi.TruncateToWidth(FItems[LIndex], ARect.Width);
     ACanvas.WriteAt(ARect.Left, LRow, LText, LStyle);
   end;
 end;

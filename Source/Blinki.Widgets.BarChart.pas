@@ -36,6 +36,7 @@ interface
 uses
   System.SysUtils,
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Style,
   Blinki.Core.Theme,
@@ -303,11 +304,11 @@ begin
   var LBarAreaTop: Integer;
   if FTitle <> '' then
   begin
-    var LFmtStr := FTitle;
-    if Length(LFmtStr) > ARect.Width then
-      LFmtStr := Copy(LFmtStr, 1, ARect.Width);
+    // Truncate and centre by columns so wide glyphs (CJK, emoji) are never
+    // cut in half and the title stays visually centred.
+    var LFmtStr := TTuiAnsi.TruncateToWidth(FTitle, ARect.Width);
     ACanvas.WriteAt(
-      ARect.Left + (ARect.Width - Length(LFmtStr)) div 2,
+      ARect.Left + (ARect.Width - TTuiAnsi.VisibleLength(LFmtStr)) div 2,
       LTitleRow, LFmtStr, LTextStyle);
     LBarAreaTop := LTitleRow + 1;
   end
@@ -397,11 +398,9 @@ begin
     // Label below the bar
     if FShowLabels and (LLabelRow < ARect.Bottom) then
     begin
-      var LCaption := FBars[LIndex].Caption;
-      if Length(LCaption) > LBarW then
-        LCaption := Copy(LCaption, 1, LBarW);
-      // Center within the bar width
-      var LCol := (LBarW - Length(LCaption)) div 2;
+      // Truncate and centre by columns (wide glyphs are never cut in half)
+      var LCaption := TTuiAnsi.TruncateToWidth(FBars[LIndex].Caption, LBarW);
+      var LCol := (LBarW - TTuiAnsi.VisibleLength(LCaption)) div 2;
       if (LBarX + LCol) < ARect.Right then
         ACanvas.WriteAt(LBarX + LCol, LLabelRow, LCaption, LDimStyle);
     end;

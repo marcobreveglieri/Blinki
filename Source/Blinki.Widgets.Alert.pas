@@ -227,9 +227,8 @@ begin
     Exit;
   ACanvas.FillRect(LInner, ' ', FTextStyle);
   var LContent := '[' + FIcon + '] ' + FText;
-  var LMaxLen := LInner.Width;
-  if Length(LContent) > LMaxLen then
-    LContent := Copy(LContent, 1, LMaxLen);
+  // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
+  LContent := TTuiAnsi.TruncateToWidth(LContent, LInner.Width);
   ACanvas.WriteAt(LInner.Left, LInner.Top, LContent, FTextStyle);
 end;
 

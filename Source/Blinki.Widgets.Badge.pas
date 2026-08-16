@@ -34,6 +34,7 @@ interface
 
 uses
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Style,
   Blinki.Core.Theme,
@@ -180,9 +181,8 @@ begin
   if ARect.IsEmpty then
     Exit;
   var LPadded := ' ' + FText + ' ';
-  var LMaxLen := ARect.Width;
-  if Length(LPadded) > LMaxLen then
-    LPadded := Copy(LPadded, 1, LMaxLen);
+  // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
+  LPadded := TTuiAnsi.TruncateToWidth(LPadded, ARect.Width);
   ACanvas.FillRect(ARect, ' ', FStyle);
   ACanvas.WriteAt(ARect.Left, ARect.Top, LPadded, FStyle);
 end;

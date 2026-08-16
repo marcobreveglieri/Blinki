@@ -35,6 +35,7 @@ interface
 uses
   System.SysUtils,
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Event,
   Blinki.Core.Style,
@@ -136,12 +137,10 @@ begin
 
   ACanvas.FillRect(ARect, ' ', LStyle);
 
-  var LLabel := ' ' + FCaption + ' ';
-  if Length(LLabel) > ARect.Width then
-    LLabel := Copy(LLabel, 1, ARect.Width);
-
-  // centre horizontally
-  var LX := ARect.Left + (ARect.Width - Length(LLabel)) div 2;
+  // Truncate and centre by columns so wide glyphs (CJK, emoji) are never
+  // cut in half and the caption stays visually centred.
+  var LLabel := TTuiAnsi.TruncateToWidth(' ' + FCaption + ' ', ARect.Width);
+  var LX := ARect.Left + (ARect.Width - TTuiAnsi.VisibleLength(LLabel)) div 2;
   ACanvas.WriteAt(LX, ARect.Top, LLabel, LStyle);
 end;
 

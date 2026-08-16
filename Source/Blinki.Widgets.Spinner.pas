@@ -34,6 +34,7 @@ interface
 
 uses
   System.Types,
+  Blinki.Core.Ansi,
   Blinki.Core.Canvas,
   Blinki.Core.Style,
   Blinki.Core.Theme,
@@ -257,8 +258,8 @@ begin
   var LText := CurrentFrame;
   if FLabel <> '' then
     LText := LText + ' ' + FLabel;
-  if Length(LText) > ARect.Width then
-    LText := Copy(LText, 1, ARect.Width);
+  // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
+  LText := TTuiAnsi.TruncateToWidth(LText, ARect.Width);
   var LStyle := TTuiStyle.Create(FColor,       Theme.Background);
   var LBgStyle := TTuiStyle.Create(Theme.Text,   Theme.Background);
   ACanvas.FillRect(ARect, ' ', LBgStyle);
