@@ -46,6 +46,20 @@ unit Blinki.Core.Unicode;
 
 interface
 
+const
+  // UTF-16 surrogate arithmetic (Unicode 3.9, D91) and single-code-point
+  // markers referenced by the inline methods below. Inline functions
+  // declared in the interface section may only use symbols visible from
+  // the interface, so these must live here rather than in Implementation.
+  CpHighSurrogateLo = $D800;
+  CpHighSurrogateHi = $DBFF;
+  CpLowSurrogateLo = $DC00;
+  CpLowSurrogateHi = $DFFF;
+  CpSupplementaryBase = $10000;
+  CpZeroWidthJoiner = $200D;
+  CpVariationSelector15 = $FE0E;
+  CpVariationSelector16 = $FE0F;
+
 type
 
 { TTuiCodePoint }
@@ -496,17 +510,9 @@ const
     (Lo: $E0020; Hi: $E01EF)   // Tag characters + Variation Selectors Supplement
   );
 
-  CpZeroWidthJoiner = $200D;
-  CpVariationSelector15 = $FE0E;
-  CpVariationSelector16 = $FE0F;
   CpCombiningEnclosingKeycap = $20E3;
 
   // UTF-16 surrogate arithmetic (Unicode 3.9, D91).
-  CpHighSurrogateLo = $D800;
-  CpHighSurrogateHi = $DBFF;
-  CpLowSurrogateLo = $DC00;
-  CpLowSurrogateHi = $DFFF;
-  CpSupplementaryBase = $10000;
   CpLowSurrogateMask = $3FF;
 
   // Emoji skin-tone modifiers; must stay in sync with the

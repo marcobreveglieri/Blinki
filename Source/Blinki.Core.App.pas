@@ -51,6 +51,7 @@ uses
   Blinki.Core.Canvas,
   Blinki.Core.Console,
   Blinki.Core.Input,
+  Blinki.Core.Render,
   Blinki.Core.Theme,
   Blinki.Core.Widget;
 

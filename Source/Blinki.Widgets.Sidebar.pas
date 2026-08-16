@@ -33,6 +33,7 @@ unit Blinki.Widgets.Sidebar;
 interface
 
 uses
+  System.SysUtils,
   System.Types,
   Blinki.Core.Canvas,
   Blinki.Core.Event,

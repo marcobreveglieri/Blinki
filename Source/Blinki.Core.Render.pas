@@ -430,6 +430,8 @@ begin
   end;
 end;
 
+initialization
+
 finalization
   TTuiClusterPool.Shutdown;
 

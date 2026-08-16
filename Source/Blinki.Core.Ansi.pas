@@ -652,7 +652,10 @@ class function TTuiAnsi.WrapText(const AText: string; AWidth: Integer): TArray<s
 
 begin
   if AWidth < 1 then
-    Exit([AText]);
+  begin
+    Result := [AText];
+    Exit;
+  end;
   var LWords := AText.Split([' ']);
   Result := nil;
   var LCount := 0;
@@ -686,7 +689,10 @@ begin
   if LLine <> '' then
     AppendLine(Result, LCount, LLine);
   if LCount = 0 then
-    Exit(['']);
+  begin
+    Result := [''];
+    Exit;
+  end;
   SetLength(Result, LCount);
 end;
 
