@@ -622,45 +622,23 @@ begin
 end;
 
 class function TTuiAnsi.BoxCharset(AStyle: TTuiBoxStyle): TTuiBoxCharSet;
+const
+  CBoxCharsets: array[TTuiBoxStyle] of TTuiBoxCharSet = (
+    // bsSingle: ┌ ┐ └ ┘ ─ │
+    (TopLeft: #$250C; TopRight: #$2510; BottomLeft: #$2514;
+     BottomRight: #$2518; Horizontal: #$2500; Vertical: #$2502),
+    // bsDouble: ╔ ╗ ╚ ╝ ═ ║
+    (TopLeft: #$2554; TopRight: #$2557; BottomLeft: #$255A;
+     BottomRight: #$255D; Horizontal: #$2550; Vertical: #$2551),
+    // bsRounded: ╭ ╮ ╰ ╯ ─ │
+    (TopLeft: #$256D; TopRight: #$256E; BottomLeft: #$2570;
+     BottomRight: #$256F; Horizontal: #$2500; Vertical: #$2502),
+    // bsHeavy: ┏ ┓ ┗ ┛ ━ ┃
+    (TopLeft: #$250F; TopRight: #$2513; BottomLeft: #$2517;
+     BottomRight: #$251B; Horizontal: #$2501; Vertical: #$2503)
+  );
 begin
-  case AStyle of
-    bsSingle:
-      begin
-        Result.TopLeft := #$250C;  // ┌
-        Result.TopRight := #$2510;  // ┐
-        Result.BottomLeft := #$2514;  // └
-        Result.BottomRight := #$2518;  // ┘
-        Result.Horizontal := #$2500;  // ─
-        Result.Vertical := #$2502;  // │
-      end;
-    bsDouble:
-      begin
-        Result.TopLeft := #$2554;  // ╔
-        Result.TopRight := #$2557;  // ╗
-        Result.BottomLeft := #$255A;  // ╚
-        Result.BottomRight := #$255D;  // ╝
-        Result.Horizontal := #$2550;  // ═
-        Result.Vertical := #$2551;  // ║
-      end;
-    bsRounded:
-      begin
-        Result.TopLeft := #$256D;  // ╭
-        Result.TopRight := #$256E;  // ╮
-        Result.BottomLeft := #$2570;  // ╰
-        Result.BottomRight := #$256F;  // ╯
-        Result.Horizontal := #$2500;  // ─
-        Result.Vertical := #$2502;  // │
-      end;
-    bsHeavy:
-      begin
-        Result.TopLeft := #$250F;  // ┏
-        Result.TopRight := #$2513;  // ┓
-        Result.BottomLeft := #$2517;  // ┗
-        Result.BottomRight := #$251B;  // ┛
-        Result.Horizontal := #$2501;  // ━
-        Result.Vertical := #$2503;  // ┃
-      end;
-  end;
+  Result := CBoxCharsets[AStyle];
 end;
 
 { TTuiBoxes }

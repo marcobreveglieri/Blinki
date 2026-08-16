@@ -499,6 +499,19 @@ const
   CpVariationSelector16 = $FE0F;
   CpCombiningEnclosingKeycap = $20E3;
 
+  // UTF-16 surrogate arithmetic (Unicode 3.9, D91).
+  CpHighSurrogateLo = $D800;
+  CpHighSurrogateHi = $DBFF;
+  CpLowSurrogateLo = $DC00;
+  CpLowSurrogateHi = $DFFF;
+  CpSupplementaryBase = $10000;
+  CpLowSurrogateMask = $3FF;
+
+  // Emoji skin-tone modifiers; must stay in sync with the
+  // "Emoji modifiers" entry of ExtendRanges above.
+  CpSkinToneLo = $1F3FB;
+  CpSkinToneHi = $1F3FF;
+
 // Binary search over a sorted, non-overlapping range table.
 function InRanges(ACodePoint: TTuiCodePoint;
   const ARanges: array of TTuiCodePointRange): Boolean;
@@ -522,8 +535,8 @@ end;
 
 class function TTuiUnicode.CombineSurrogates(AHigh, ALow: Char): TTuiCodePoint;
 begin
-  Result := ((TTuiCodePoint(Ord(AHigh)) - $D800) shl 10) +
-    (TTuiCodePoint(Ord(ALow)) - $DC00) + $10000;
+  Result := ((TTuiCodePoint(Ord(AHigh)) - CpHighSurrogateLo) shl 10) +
+    (TTuiCodePoint(Ord(ALow)) - CpLowSurrogateLo) + CpSupplementaryBase;
 end;
 
 class function TTuiUnicode.CodePointToString(ACodePoint: TTuiCodePoint): string;
@@ -532,20 +545,20 @@ begin
     Result := Char(Word(ACodePoint))
   else
   begin
-    var LOffset := ACodePoint - $10000;
-    Result := Char(Word($D800 + (LOffset shr 10))) +
-      Char(Word($DC00 + (LOffset and $3FF)));
+    var LOffset := ACodePoint - CpSupplementaryBase;
+    Result := Char(Word(CpHighSurrogateLo + (LOffset shr 10))) +
+      Char(Word(CpLowSurrogateLo + (LOffset and CpLowSurrogateMask)));
   end;
 end;
 
 class function TTuiUnicode.IsHighSurrogate(ACh: Char): Boolean;
 begin
-  Result := (Ord(ACh) >= $D800) and (Ord(ACh) <= $DBFF);
+  Result := (Ord(ACh) >= CpHighSurrogateLo) and (Ord(ACh) <= CpHighSurrogateHi);
 end;
 
 class function TTuiUnicode.IsLowSurrogate(ACh: Char): Boolean;
 begin
-  Result := (Ord(ACh) >= $DC00) and (Ord(ACh) <= $DFFF);
+  Result := (Ord(ACh) >= CpLowSurrogateLo) and (Ord(ACh) <= CpLowSurrogateHi);
 end;
 
 class function TTuiUnicode.NextCodePoint(const AText: string;
@@ -734,7 +747,7 @@ begin
      ((ACodePoint >= $200B) and (ACodePoint <= $200F)) or
      (ACodePoint = $2060) or (ACodePoint = $FEFF) then
     Exit(0);
-  if (ACodePoint >= $1F3FB) and (ACodePoint <= $1F3FF) then
+  if (ACodePoint >= CpSkinToneLo) and (ACodePoint <= CpSkinToneHi) then
     Exit(2);
   if IsExtend(ACodePoint) then
     Exit(0);

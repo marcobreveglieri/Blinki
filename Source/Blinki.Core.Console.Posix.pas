@@ -308,8 +308,8 @@ begin
   end
   else
   begin
-    Result.cx := 80;
-    Result.cy := 24;
+    Result.cx := CTuiFallbackCols;
+    Result.cy := CTuiFallbackRows;
   end;
 end;
 

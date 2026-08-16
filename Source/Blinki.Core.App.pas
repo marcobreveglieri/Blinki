@@ -54,6 +54,12 @@ uses
   Blinki.Core.Theme,
   Blinki.Core.Widget;
 
+const
+  /// <summary>
+  ///   Default duration of a main-loop tick in milliseconds (50 ms = 20 fps).
+  /// </summary>
+  CTuiDefaultTickMs = 50;
+
 type
 
 { ETuiAppError }
@@ -301,7 +307,7 @@ begin
   FModalStack := TList<TTuiModalEntry>.Create;
   FModalDim := True;
   FModalTrapsGlobalKeys := True;
-  FTickMs := 50;
+  FTickMs := CTuiDefaultTickMs;
   FTheme := TTuiTheme.Default;
 end;
 

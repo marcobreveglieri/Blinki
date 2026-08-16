@@ -146,6 +146,23 @@ implementation
 const
   BEsc = $1B;
 
+  // xterm encodes modifiers as parameter value 1 + bitmask.
+  CModShiftBit = 1;
+  CModAltBit = 2;
+  CModCtrlBit = 4;
+
+  // Bit layout of the SGR mouse button field (ESC [ < b ; x ; y M/m).
+  CSgrButtonMask = 3;
+  CSgrShiftBit = 4;
+  CSgrAltBit = 8;
+  CSgrCtrlBit = 16;
+  CSgrMotionBit = 32;
+  CSgrWheelBit = 64;
+
+  // Upper bound for CSI numeric parameters: real values are small, so the
+  // clamp only guards against overflow on garbage input.
+  CMaxCsiParam = 65535;
+
 { TTuiSequenceDecoder }
 
 constructor TTuiSequenceDecoder.Create;
@@ -252,11 +269,11 @@ begin
   if AParam < 2 then
     Exit;
   var LBits := AParam - 1;
-  if (LBits and 1) <> 0 then
+  if (LBits and CModShiftBit) <> 0 then
     Include(Result, kmShift);
-  if (LBits and 2) <> 0 then
+  if (LBits and CModAltBit) <> 0 then
     Include(Result, kmAlt);
-  if (LBits and 4) <> 0 then
+  if (LBits and CModCtrlBit) <> 0 then
     Include(Result, kmCtrl);
 end;
 
@@ -318,24 +335,24 @@ begin
     LX := 0;
   if LY < 0 then
     LY := 0;
-  if (LB and 32) <> 0 then
+  if (LB and CSgrMotionBit) <> 0 then
     Exit; // motion report: the framework never consumes mekMove
 
   var LModifiers: TTuiKeyModifiers := [];
-  if (LB and 4) <> 0 then
+  if (LB and CSgrShiftBit) <> 0 then
     Include(LModifiers, kmShift);
-  if (LB and 8) <> 0 then
+  if (LB and CSgrAltBit) <> 0 then
     Include(LModifiers, kmAlt);
-  if (LB and 16) <> 0 then
+  if (LB and CSgrCtrlBit) <> 0 then
     Include(LModifiers, kmCtrl);
 
-  if (LB and 64) <> 0 then
+  if (LB and CSgrWheelBit) <> 0 then
   begin
     // Vertical wheel only: 64 = up, 65 = down. 66/67 are horizontal wheel
     // events, which no widget consumes: reporting them as vertical would
     // scroll lists during horizontal touchpad gestures.
     var LDelta: Integer;
-    case LB and 3 of
+    case LB and CSgrButtonMask of
       0: LDelta := 1;
       1: LDelta := -1;
     else
@@ -348,7 +365,7 @@ begin
   end;
 
   var LButton: TTuiMouseButton;
-  case LB and 3 of
+  case LB and CSgrButtonMask of
     0: LButton := mbLeft;
     1: LButton := mbMiddle;
     2: LButton := mbRight;
@@ -444,8 +461,8 @@ begin
       if not LInSubparam then
       begin
         LCurrent := LCurrent * 10 + (LByte - Ord('0'));
-        if LCurrent > 65535 then
-          LCurrent := 65535; // clamp: params are small; avoid overflow on garbage
+        if LCurrent > CMaxCsiParam then
+          LCurrent := CMaxCsiParam;
         LHasDigits := True;
       end;
     end

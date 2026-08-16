@@ -41,6 +41,18 @@ uses
   Blinki.Core.Event,
   Blinki.Core.Input;
 
+const
+  /// <summary>
+  ///   Terminal size reported when the real size cannot be queried from the
+  ///   operating system (classic VT100 default).
+  /// </summary>
+  CTuiFallbackCols = 80;
+
+  /// <summary>
+  ///   Companion row count for CTuiFallbackCols.
+  /// </summary>
+  CTuiFallbackRows = 24;
+
 type
 
 { ETuiConsoleError }

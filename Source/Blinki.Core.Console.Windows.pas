@@ -278,8 +278,8 @@ begin
   var LInfo: TConsoleScreenBufferInfo;
   if not GetConsoleScreenBufferInfo(FStdOut, LInfo) then
   begin
-    Result.cx := 80;
-    Result.cy := 24;
+    Result.cx := CTuiFallbackCols;
+    Result.cy := CTuiFallbackRows;
     Exit;
   end;
   Result.cx := LInfo.srWindow.Right - LInfo.srWindow.Left + 1;
