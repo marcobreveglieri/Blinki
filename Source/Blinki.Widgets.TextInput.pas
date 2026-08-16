@@ -69,6 +69,7 @@ type
     FNormalStyleOverride: Boolean;
     FFocusedStyleOverride: Boolean;
     function  DisplayCursorPos: Integer;
+    procedure MoveCursorTo(ANewPos: Integer);
     function  SnapCursorToBoundary(AValue: Integer): Integer;
     procedure SetText(const AValue: string);
     procedure SetCursorPos(AValue: Integer);
@@ -197,6 +198,14 @@ begin
     Inc(Result);
     LIndex := TTuiUnicode.NextGraphemeBoundary(FText, LIndex);
   end;
+end;
+
+procedure TTuiTextInput.MoveCursorTo(ANewPos: Integer);
+begin
+  if ANewPos = FCursorPos then
+    Exit;
+  FCursorPos := ANewPos;
+  Invalidate;
 end;
 
 function TTuiTextInput.SnapCursorToBoundary(AValue: Integer): Integer;
@@ -333,48 +342,27 @@ begin
 
     kcLeft:
       begin
-        var LNewPos := FCursorPos;
         if FCursorPos > 0 then
-          LNewPos := TTuiUnicode.PrevGraphemeBoundary(FText, FCursorPos + 1) - 1;
-        if LNewPos <> FCursorPos then
-        begin
-          FCursorPos := LNewPos;
-          Invalidate;
-        end;
+          MoveCursorTo(TTuiUnicode.PrevGraphemeBoundary(FText, FCursorPos + 1) - 1);
         Result := True;
       end;
 
     kcRight:
       begin
-        var LNewPos := FCursorPos;
         if FCursorPos < Length(FText) then
-          LNewPos := TTuiUnicode.NextGraphemeBoundary(FText, FCursorPos + 1) - 1;
-        if LNewPos <> FCursorPos then
-        begin
-          FCursorPos := LNewPos;
-          Invalidate;
-        end;
+          MoveCursorTo(TTuiUnicode.NextGraphemeBoundary(FText, FCursorPos + 1) - 1);
         Result := True;
       end;
 
     kcHome:
       begin
-        if FCursorPos <> 0 then
-        begin
-          FCursorPos := 0;
-          Invalidate;
-        end;
+        MoveCursorTo(0);
         Result := True;
       end;
 
     kcEnd:
       begin
-        var LNewPos := Length(FText);
-        if LNewPos <> FCursorPos then
-        begin
-          FCursorPos := LNewPos;
-          Invalidate;
-        end;
+        MoveCursorTo(Length(FText));
         Result := True;
       end;
 
