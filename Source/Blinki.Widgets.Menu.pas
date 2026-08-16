@@ -53,6 +53,15 @@ type
     Caption: string;
     Shortcut: Char;
     Separator: Boolean;
+    /// <summary>
+    ///   UTF-16 index of the shortcut inside Caption (0 = none). Computed
+    ///   once by AddItem so the render loop does not rescan every frame.
+    /// </summary>
+    ShortcutIndex: Integer;
+    /// <summary>
+    ///   Terminal column of the shortcut glyph, derived from ShortcutIndex.
+    /// </summary>
+    ShortcutCol: Integer;
   end;
 
 { TTuiMenu }
@@ -246,9 +255,7 @@ begin
 
     if LItem.Separator then
     begin
-      var LSepText := StringOfChar('-', ARect.Width);
-      ACanvas.FillRect(LRowRect, ' ', FSeparatorStyle);
-      ACanvas.WriteAt(ARect.Left, LRow, LSepText, FSeparatorStyle);
+      ACanvas.FillRect(LRowRect, '-', FSeparatorStyle);
       Continue;
     end;
 
@@ -268,29 +275,17 @@ begin
     // Truncate by columns so a wide glyph (CJK, emoji) is never cut in half.
     var LText := TTuiAnsi.TruncateToWidth(LItem.Caption, ARect.Width);
 
-    if LItem.Shortcut = #0 then
-    begin
-      ACanvas.WriteAt(ARect.Left, LRow, LText, LStyle);
-    end
-    else
-    begin
-      // Render text + underlined shortcut
-      var LShortIdx := Pos(UpCase(LItem.Shortcut), UpperCase(LText));
-      if LShortIdx > 0 then
-      begin
-        ACanvas.WriteAt(ARect.Left, LRow, LText, LStyle);
-        // Overwrite the shortcut character with the underline attribute.
-        // Pos returns a UTF-16 index: convert it to a terminal column so the
-        // underline lands on the right cell after wide glyphs (emoji, CJK).
-        var LShortCol := TTuiAnsi.VisibleLength(Copy(LText, 1, LShortIdx - 1));
-        if LShortCol < ARect.Width then
-          ACanvas.WriteAt(ARect.Left + LShortCol, LRow,
-            Copy(LText, LShortIdx, TTuiUnicode.GraphemeLengthAt(LText, LShortIdx)),
-            TTuiStyle.Create(LStyle.Foreground, LStyle.Background, [taUnderline]));
-      end
-      else
-        ACanvas.WriteAt(ARect.Left, LRow, LText, LStyle);
-    end;
+    ACanvas.WriteAt(ARect.Left, LRow, LText, LStyle);
+
+    // Overwrite the shortcut glyph with the underline attribute, using the
+    // index/column resolved once in AddItem. Skip it when truncation cut
+    // the shortcut away or the column falls outside the widget.
+    if (LItem.ShortcutIndex > 0) and (LItem.ShortcutIndex <= Length(LText)) and
+       (LItem.ShortcutCol < ARect.Width) then
+      ACanvas.WriteAt(ARect.Left + LItem.ShortcutCol, LRow,
+        Copy(LText, LItem.ShortcutIndex,
+          TTuiUnicode.GraphemeLengthAt(LText, LItem.ShortcutIndex)),
+        TTuiStyle.Create(LStyle.Foreground, LStyle.Background, [taUnderline]));
   end;
 end;
 
@@ -409,6 +404,18 @@ begin
   LItem.Caption := ACaption;
   LItem.Shortcut := AShortcut;
   LItem.Separator := False;
+  LItem.ShortcutIndex := 0;
+  LItem.ShortcutCol := 0;
+  if AShortcut <> #0 then
+  begin
+    // Case-insensitive search (ASCII), resolved once here instead of on
+    // every rendered frame. Pos returns a UTF-16 index: convert it to a
+    // terminal column so the underline lands right after wide glyphs.
+    LItem.ShortcutIndex := Pos(UpCase(AShortcut), UpperCase(ACaption));
+    if LItem.ShortcutIndex > 0 then
+      LItem.ShortcutCol :=
+        TTuiAnsi.VisibleLength(Copy(ACaption, 1, LItem.ShortcutIndex - 1));
+  end;
   FItems.Add(LItem);
   if FItemIndex = -1 then
     FItemIndex := FItems.Count - 1;
@@ -421,6 +428,8 @@ begin
   LItem.Caption := '';
   LItem.Shortcut := #0;
   LItem.Separator := True;
+  LItem.ShortcutIndex := 0;
+  LItem.ShortcutCol := 0;
   FItems.Add(LItem);
   Invalidate;
 end;
