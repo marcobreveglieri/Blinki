@@ -47,6 +47,15 @@ type
   ///   integer sizes. Stateless: call Solve once per frame.
   /// </summary>
   TTuiLayoutSolver = class sealed
+  strict private
+    class procedure AbsorbRemainder(ATotal, ALastFlex: Integer;
+      var ASizes: TArray<Integer>); static;
+    class function ApplyFixedAndPercentage(ATotal: Integer;
+      const AConstraints: TArray<TTuiLayoutConstraint>;
+      var ASizes: TArray<Integer>): Integer; static;
+    class function DistributeFlex(ARemaining: Integer;
+      const AConstraints: TArray<TTuiLayoutConstraint>;
+      var ASizes: TArray<Integer>): Integer; static;
   public
     /// <summary>
     ///   Resolves AConstraints by distributing ATotal cells among children.
@@ -57,7 +66,17 @@ type
     ///   trimmed from the last element.
     /// </summary>
     class function Solve(ATotal: Integer;
-      const AConstraints: TArray<TTuiLayoutConstraint>): TArray<Integer>; static;
+      const AConstraints: TArray<TTuiLayoutConstraint>): TArray<Integer>;
+      overload; static;
+
+    /// <summary>
+    ///   As the function overload, but fills ASizes in place, resizing it
+    ///   only when the length differs. Per-frame callers can pass a field
+    ///   buffer and avoid one array allocation per Solve call.
+    /// </summary>
+    class procedure Solve(ATotal: Integer;
+      const AConstraints: TArray<TTuiLayoutConstraint>;
+      var ASizes: TArray<Integer>); overload; static;
   end;
 
 implementation
@@ -67,112 +86,120 @@ uses
 
 { TTuiLayoutSolver }
 
-class function TTuiLayoutSolver.Solve(ATotal: Integer;
-  const AConstraints: TArray<TTuiLayoutConstraint>): TArray<Integer>;
+// ---- Pass 1: Fixed + Percentage; returns the cells they consumed ----
+class function TTuiLayoutSolver.ApplyFixedAndPercentage(ATotal: Integer;
+  const AConstraints: TArray<TTuiLayoutConstraint>;
+  var ASizes: TArray<Integer>): Integer;
 begin
-  var LCount := Length(AConstraints);
-  if LCount = 0 then
-  begin
-    Result := nil;
-    Exit;
-  end;
-
-  var LResult: TArray<Integer>;
-  SetLength(LResult, LCount);
-  var LFixedUsed := 0;
-  var LLastFlex  := -1;
-
-  // ---- Pass 1: Fixed + Percentage ----
-  for var LIndex := 0 to LCount - 1 do
+  Result := 0;
+  for var LIndex := 0 to High(AConstraints) do
   begin
     var LC := AConstraints[LIndex];
     case LC.Kind of
       lckFixed:
         begin
-          LResult[LIndex] := LC.Value;
-          Inc(LFixedUsed, LC.Value);
+          ASizes[LIndex] := LC.Value;
+          Inc(Result, LC.Value);
         end;
       lckPercentage:
         begin
-          LResult[LIndex] := Max(0, Round(ATotal * LC.Value / 100));
-          Inc(LFixedUsed, LResult[LIndex]);
+          ASizes[LIndex] := Max(0, Round(ATotal * LC.Value / 100));
+          Inc(Result, ASizes[LIndex]);
         end;
     end;
   end;
+end;
 
-  // ---- Pass 2: remaining space distribution to Fill/Min/Max ----
-  var LRemaining := Max(0, ATotal - LFixedUsed);
+// ---- Pass 2: distribute the remaining space to Fill/Min/Max ----
+// Returns the index of the last flex element, or -1 when there is none.
+class function TTuiLayoutSolver.DistributeFlex(ARemaining: Integer;
+  const AConstraints: TArray<TTuiLayoutConstraint>;
+  var ASizes: TArray<Integer>): Integer;
+begin
+  Result := -1;
 
-  // computes total weight of flex elements
   var LTotWeight := 0;
-  for var LIndex := 0 to LCount - 1 do
+  for var LIndex := 0 to High(AConstraints) do
+    case AConstraints[LIndex].Kind of
+      lckFill:
+        Inc(LTotWeight, AConstraints[LIndex].Value);
+      lckMin, lckMax:
+        Inc(LTotWeight, 1);
+    end;
+  if LTotWeight = 0 then
+    Exit;
+
+  for var LIndex := 0 to High(AConstraints) do
   begin
     var LC := AConstraints[LIndex];
     case LC.Kind of
       lckFill:
-        Inc(LTotWeight, LC.Value);
-      lckMin, lckMax:
-        Inc(LTotWeight, 1);
+        begin
+          ASizes[LIndex] := (ARemaining * LC.Value) div LTotWeight;
+          Result := LIndex;
+        end;
+      lckMin:
+        begin
+          ASizes[LIndex] := Max(LC.Value, ARemaining div LTotWeight);
+          Result := LIndex;
+        end;
+      lckMax:
+        begin
+          ASizes[LIndex] := Min(LC.Value, ARemaining div LTotWeight);
+          Result := LIndex;
+        end;
     end;
   end;
+end;
 
-  var LShare: Integer;
-  if LTotWeight > 0 then
-  begin
-    for var LIndex := 0 to LCount - 1 do
-    begin
-      var LC := AConstraints[LIndex];
-      case LC.Kind of
-        lckFill:
-          begin
-            LShare := (LRemaining * LC.Value) div LTotWeight;
-            LResult[LIndex] := LShare;
-            LLastFlex := LIndex;
-          end;
-        lckMin:
-          begin
-            LShare := (LRemaining * 1) div LTotWeight;
-            LResult[LIndex] := Max(LC.Value, LShare);
-            LLastFlex := LIndex;
-          end;
-        lckMax:
-          begin
-            LShare := (LRemaining * 1) div LTotWeight;
-            LResult[LIndex] := Min(LC.Value, LShare);
-            LLastFlex := LIndex;
-          end;
-      end;
-    end;
+// ---- Pass 3: remainder to the last flex (off-by-one prevention) ----
+class procedure TTuiLayoutSolver.AbsorbRemainder(ATotal, ALastFlex: Integer;
+  var ASizes: TArray<Integer>);
+begin
+  var LSum := 0;
+  for var LIndex := 0 to High(ASizes) do
+    Inc(LSum, ASizes[LIndex]);
+  if LSum < ATotal then
+    Inc(ASizes[ALastFlex], ATotal - LSum)
+  else if LSum > ATotal then
+    // trims excess from the last flex (Min case with high bound)
+    Dec(ASizes[ALastFlex], LSum - ATotal);
+end;
 
-    // ---- Pass 3: remainder to the last flex (off-by-one prevention) ----
-    if LLastFlex >= 0 then
-    begin
-      LShare := 0;
-      for var LIndex := 0 to LCount - 1 do
-        Inc(LShare, LResult[LIndex]);
-      if LShare < ATotal then
-        Inc(LResult[LLastFlex], ATotal - LShare)
-      else if LShare > ATotal then
-        // trims excess from the last flex (Min case with high bound)
-        Dec(LResult[LLastFlex], LShare - ATotal);
-    end;
-  end
-  else
-  begin
-    // No flex elements: Fixed+Percentage only. If they exceed ATotal, trims the last.
-    if LFixedUsed > ATotal then
-    begin
-      var LIndex := LCount - 1;
-      LResult[LIndex] := Max(0, LResult[LIndex] - (LFixedUsed - ATotal));
-    end;
-  end;
+class function TTuiLayoutSolver.Solve(ATotal: Integer;
+  const AConstraints: TArray<TTuiLayoutConstraint>): TArray<Integer>;
+begin
+  Result := nil;
+  Solve(ATotal, AConstraints, Result);
+end;
+
+class procedure TTuiLayoutSolver.Solve(ATotal: Integer;
+  const AConstraints: TArray<TTuiLayoutConstraint>; var ASizes: TArray<Integer>);
+begin
+  var LCount := Length(AConstraints);
+  if Length(ASizes) <> LCount then
+    SetLength(ASizes, LCount);
+  if LCount = 0 then
+    Exit;
+  // ASizes may be a reused buffer: reset entries the passes do not assign.
+  for var LIndex := 0 to LCount - 1 do
+    ASizes[LIndex] := 0;
+
+  var LFixedUsed := ApplyFixedAndPercentage(ATotal, AConstraints, ASizes);
+  var LRemaining := Max(0, ATotal - LFixedUsed);
+  var LLastFlex := DistributeFlex(LRemaining, AConstraints, ASizes);
+
+  if LLastFlex >= 0 then
+    AbsorbRemainder(ATotal, LLastFlex, ASizes)
+  else if LFixedUsed > ATotal then
+    // No flex elements: Fixed+Percentage only. If they exceed ATotal,
+    // trims the last.
+    ASizes[LCount - 1] := Max(0, ASizes[LCount - 1] - (LFixedUsed - ATotal));
 
   // Final clamp: no element below 0
   for var LIndex := 0 to LCount - 1 do
-    if LResult[LIndex] < 0 then
-      LResult[LIndex] := 0;
-
-  Result := LResult;
+    if ASizes[LIndex] < 0 then
+      ASizes[LIndex] := 0;
 end;
 
 end.
